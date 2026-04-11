@@ -1,0 +1,67 @@
+{
+  "sessionId": "test-session-001",
+  "projectHash": "abc123",
+  "startTime": "2026-01-01T10:00:00Z",
+  "lastUpdated": "2026-01-01T10:05:00Z",
+  "messages": [
+    {
+      "type": "user",
+      "timestamp": "2026-01-01T10:00:00Z",
+      "content": [{"text": "Help me fix the login bug"}]
+    },
+    {
+      "type": "gemini",
+      "timestamp": "2026-01-01T10:00:05Z",
+      "model": "gemini-2.5-flash",
+      "content": "I'll investigate the login issue.",
+      "thoughts": [
+        {"subject": "Analysis", "description": "Let me check the auth module.", "timestamp": "2026-01-01T10:00:04Z"}
+      ],
+      "toolCalls": [
+        {
+          "id": "read_file-123",
+          "name": "read_file",
+          "displayName": "ReadFile",
+          "args": {"absolute_path": "/src/login.py"},
+          "result": [{"functionResponse": {"id": "read_file-123", "name": "read_file", "response": {"output": "def login():\n    pass"}}}],
+          "status": "success",
+          "resultDisplay": "22 lines",
+          "timestamp": "2026-01-01T10:00:05Z",
+          "description": "Read a file",
+          "renderOutputAsMarkdown": true
+        },
+        {
+          "id": "run_shell_command-456",
+          "name": "run_shell_command",
+          "displayName": "Shell",
+          "args": {"command": "npm test", "description": "Run tests"},
+          "result": [{"functionResponse": {"id": "run_shell_command-456", "name": "run_shell_command", "response": {"error": "[Operation Cancelled] Reason: User cancelled the operation."}}}],
+          "status": "cancelled",
+          "resultDisplay": null,
+          "timestamp": "2026-01-01T10:00:06Z",
+          "description": "Run a shell command",
+          "renderOutputAsMarkdown": false
+        }
+      ],
+      "tokens": {"input": 5000, "output": 200, "cached": 3000, "thoughts": 100}
+    },
+    {
+      "type": "info",
+      "timestamp": "2026-01-01T10:00:07Z",
+      "content": "Request cancelled."
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-01-01T10:01:00Z",
+      "content": [{"text": "Try a different approach"}]
+    },
+    {
+      "type": "gemini",
+      "timestamp": "2026-01-01T10:01:05Z",
+      "model": "gemini-2.5-flash",
+      "content": "Let me try another approach.",
+      "toolCalls": [],
+      "tokens": {"input": 8000, "output": 150, "cached": 5000, "thoughts": 50}
+    }
+  ]
+}

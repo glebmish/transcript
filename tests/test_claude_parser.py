@@ -1,0 +1,110 @@
+from pathlib import Path
+from transcript.parsers.claude import parse
+from transcript.model import Status, Role
+
+FIXTURE = str(Path(__file__).parent / "fixtures" / "claude_minimal.jsonl")
+
+
+def test_parse_message_count():
+    t = parse(FIXTURE)
+    # 2 user + 2 assistant + 1 compaction marker = 5
+    assert len(t.messages) == 5
+
+
+def test_parse_user_message():
+    t = parse(FIXTURE)
+    msg = t.messages[0]
+    assert msg.role == Role.USER
+    assert msg.text == ["Help me refactor auth"]
+    assert msg.is_compaction_marker is False
+
+
+def test_parse_assistant_with_thinking():
+    t = parse(FIXTURE)
+    msg = t.messages[1]
+    assert msg.role == Role.ASSISTANT
+    assert msg.model == "claude-opus-4-6"
+    assert msg.thinking == ["Let me look at auth code."]
+    assert msg.text == ["I'll read the middleware."]
+
+
+def test_parse_tool_call_by_id():
+    t = parse(FIXTURE)
+    msg = t.messages[1]
+    assert len(msg.tool_calls) == 1
+    tc = msg.tool_calls[0]
+    assert tc.name == "Read"
+    assert tc.display_name == "Read"
+    assert tc.summary == "/src/auth.py"
+    assert tc.result_summary == "84 lines"
+    assert "def authenticate" in tc.result_full
+    assert tc.status == Status.PASSED
+
+
+def test_parse_failed_tool():
+    t = parse(FIXTURE)
+    msg = t.messages[4]  # second assistant (after compaction marker + user)
+    tc = msg.tool_calls[0]
+    assert tc.name == "Bash"
+    assert tc.summary == "Run tests"
+    assert tc.result_summary == "FAILED (exit 1)"
+    assert tc.status == Status.FAILED
+    assert "AssertionError" in tc.result_full
+
+
+def test_parse_compaction_marker():
+    t = parse(FIXTURE)
+    marker = t.messages[2]
+    assert marker.is_compaction_marker is True
+
+
+def test_parse_tokens_cache_aware():
+    t = parse(FIXTURE)
+    msg = t.messages[1]
+    assert msg.tokens_in == 10000
+    assert msg.tokens_out == 500
+    assert msg.tokens_cached == 8000
+
+
+def test_parse_transcript_metadata():
+    t = parse(FIXTURE)
+    assert t.source_format == "claude"
+    assert "claude-opus-4-6" in t.models
+    assert t.total_tokens_in == 22000
+    assert t.total_tokens_out == 800
+
+
+def test_parse_tool_stats():
+    t = parse(FIXTURE)
+    assert t.tool_stats.passed == 1
+    assert t.tool_stats.failed == 1
+    assert t.tool_stats.cancelled == 0
+
+
+def test_parse_cost():
+    t = parse(FIXTURE)
+    # billable_in = (10000-8000) + (12000-9000) = 5000
+    # cost = 5000/1M * 5.00 + 800/1M * 25.00 = 0.025 + 0.02 = 0.045
+    assert t.total_cost is not None
+    assert abs(t.total_cost - 0.045) < 0.001
+    assert t.cost_is_partial is False
+
+
+def test_deduplication():
+    import tempfile, os
+    lines = [
+        '{"type":"user","timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+        '{"type":"assistant","timestamp":"2026-01-01T10:00:01Z","message":{"id":"msg_dup","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":0}}}',
+        '{"type":"assistant","timestamp":"2026-01-01T10:00:01Z","message":{"id":"msg_dup","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":" world"}],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":0}}}',
+    ]
+    fd, path = tempfile.mkstemp(suffix=".jsonl")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines))
+        t = parse(path)
+        assistant_msgs = [m for m in t.messages if m.role == Role.ASSISTANT]
+        assert len(assistant_msgs) == 1
+        assert assistant_msgs[0].tokens_in == 100  # counted once
+        assert assistant_msgs[0].text == ["hello", "world"]  # both accumulated
+    finally:
+        os.unlink(path)

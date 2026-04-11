@@ -1,0 +1,123 @@
+from datetime import datetime, timezone
+from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
+from transcript.renderers.markdown import render, RenderOptions
+
+
+def _make_transcript(messages, **kwargs):
+    defaults = dict(
+        source_format="claude",
+        session_id=None,
+        start_time=messages[0].timestamp if messages else datetime.min.replace(tzinfo=timezone.utc),
+        end_time=messages[-1].timestamp if messages else datetime.min.replace(tzinfo=timezone.utc),
+        models={"claude-opus-4-6"},
+        total_tokens_in=10000,
+        total_tokens_out=500,
+        total_cost=0.045,
+        cost_is_partial=False,
+        tool_stats=ToolStats(passed=1, failed=1, cancelled=0),
+    )
+    defaults.update(kwargs)
+    return Transcript(messages=messages, **defaults)
+
+
+TS1 = datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+TS2 = datetime(2026, 1, 1, 10, 0, 5, tzinfo=timezone.utc)
+
+
+def test_render_summary_header():
+    t = _make_transcript([
+        Message(role=Role.USER, timestamp=TS1, text=["hello"]),
+        Message(role=Role.ASSISTANT, timestamp=TS2, model="claude-opus-4-6",
+                tokens_in=10000, tokens_out=500, text=["hi"]),
+    ])
+    md = render(t)
+    assert "# Transcript" in md
+    assert "Duration" in md
+    assert "claude-opus-4-6" in md
+    assert "2 (1 user, 1 assistant)" in md
+
+
+def test_render_no_thinking():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                thinking=["secret thoughts"], text=["visible"]),
+    ])
+    md = render(t, RenderOptions(show_thinking=False))
+    assert "secret thoughts" not in md
+    assert "visible" in md
+
+
+def test_render_no_tools():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                text=["visible"], tool_calls=[
+                    ToolCall(name="Read", display_name="Read", summary="/f.py",
+                             result_summary="10 lines", result_full="content", status=Status.PASSED)
+                ]),
+    ])
+    md = render(t, RenderOptions(show_tools=False))
+    assert "Read" not in md
+
+
+def test_render_no_text():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                text=["hidden text"], tool_calls=[
+                    ToolCall(name="Read", display_name="Read", summary="/f.py",
+                             result_summary="10 lines", result_full="content", status=Status.PASSED)
+                ]),
+    ])
+    md = render(t, RenderOptions(show_text=False))
+    assert "hidden text" not in md
+    assert "Read" in md
+
+
+def test_render_no_cost():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                tokens_in=10000, tokens_out=500, text=["hi"]),
+    ])
+    md = render(t, RenderOptions(show_cost=False))
+    assert "$" not in md
+    assert "\u2191" not in md  # ↑
+
+
+def test_render_expand_tools():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                text=["ok"], tool_calls=[
+                    ToolCall(name="Bash", display_name="Bash", summary="ls",
+                             result_summary="ok", result_full="file1.py\nfile2.py", status=Status.PASSED)
+                ]),
+    ])
+    md = render(t, RenderOptions(expand_tools=True))
+    assert "file1.py" in md
+    assert "file2.py" in md
+
+
+def test_render_compaction_marker():
+    t = _make_transcript([
+        Message(role=Role.USER, timestamp=TS1, text=["before"]),
+        Message(role=Role.USER, timestamp=TS1, is_compaction_marker=True, text=["Conversation compacted"]),
+        Message(role=Role.USER, timestamp=TS2, text=["after"]),
+    ])
+    md = render(t)
+    assert "conversation compacted" in md.lower()
+    assert "before" in md
+    assert "after" in md
+
+
+def test_render_partial_cost():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                tokens_in=10000, tokens_out=500, text=["hi"]),
+    ], total_cost=0.045, cost_is_partial=True)
+    md = render(t)
+    assert "partial" in md.lower()
+
+
+def test_render_empty():
+    t = _make_transcript([], models=set(), total_tokens_in=0, total_tokens_out=0,
+                          total_cost=None, tool_stats=ToolStats(0, 0, 0))
+    md = render(t)
+    assert "No messages" in md
