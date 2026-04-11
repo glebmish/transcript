@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 import sys
 import argparse
 from transcript.detect import detect_format
@@ -21,6 +23,7 @@ def main():
     parser.add_argument("--no-text", action="store_true", help="Exclude response text")
     parser.add_argument("--no-cost", action="store_true", help="Exclude cost/token info")
     parser.add_argument("--expand-tools", action="store_true", help="Show full tool output")
+    parser.add_argument("--glow", action="store_true", help="Render markdown with glow")
 
     # Handle 'view' subcommand
     argv = sys.argv[1:]
@@ -77,5 +80,12 @@ def main():
     if args.output:
         with open(args.output, "w") as f:
             f.write(md)
+    elif args.glow:
+        glow_bin = shutil.which("glow")
+        if not glow_bin:
+            print("Error: glow not found in PATH. Install it: https://github.com/charmbracelet/glow", file=sys.stderr)
+            sys.exit(1)
+        proc = subprocess.run([glow_bin, "-"], input=md, text=True)
+        sys.exit(proc.returncode)
     else:
         sys.stdout.write(md)
