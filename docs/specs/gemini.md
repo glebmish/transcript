@@ -62,7 +62,7 @@ First message uses the raw value. This gives meaningful per-message input token 
 
 ## Tool Call Mapping
 
-Each entry in `toolCalls[]`:
+Each entry in `toolCalls[]` has 10 fields. Mapping:
 
 | Field | Maps to |
 |-------|---------|
@@ -72,24 +72,40 @@ Each entry in `toolCalls[]`:
 | `resultDisplay` | `ToolCall.result_summary` |
 | `result[0].functionResponse.response.output` | `ToolCall.result_full` |
 | `status` | `ToolCall.status` |
+| `id` | Not used (internal tracking) |
+| `timestamp` | Not used (message timestamp is sufficient) |
+| `description` | Not used (tool description text) |
+| `renderOutputAsMarkdown` | Not used |
 
 ### Tool Name Mapping
 
-Gemini has distinct internal vs display names:
+Gemini has distinct internal vs display names. Mapping verified against real logs:
 
 | Internal (`name`) | Display (`displayName`) | Summary from `args` |
 |---|---|---|
-| `read_file` | `ReadFile` | `file_path` |
+| `read_file` | `ReadFile` | `absolute_path` |
 | `read_many_files` | `ReadManyFiles` | `paths` (joined) |
 | `write_file` | `WriteFile` | `file_path` |
 | `replace` | `Edit` | `file_path` |
 | `list_directory` | `ReadFolder` | `dir_path` |
-| `run_shell_command` | `Shell` | `command[:80]` |
-| `search_file_content` | `SearchText` | `pattern` + `include` |
+| `run_shell_command` | `Shell` | `description`, fallback `command[:80]` |
+| `grep_search` | `SearchText` | `pattern` |
+| `search_file_content` | `SearchText` | `pattern` |
 | `glob` | `FindFiles` | `pattern` |
 | `google_web_search` | `GoogleSearch` | `query` |
+| `web_fetch` | `WebFetch` | `url` |
 | `activate_skill` | `Activate Skill` | `name` |
+| `ask_user` | `Ask User` | `questions` |
+| `write_todos` | `WriteTodos` | first string value from `args` |
+| `enter_plan_mode` | `Enter Plan Mode` | `reason` |
+| `exit_plan_mode` | `Exit Plan Mode` | `plan_path` |
+| `codebase_investigator` | `Codebase Investigator Agent` | `objective` |
+| `generalist` | `Generalist Agent` | `request` |
+| `cli_help` | `CLI Help Agent` | `question` |
+| `mcp_*` | MCP server display name | first string value from `args` |
 | Other | `displayName` or `name` | First string value from `args` |
+
+Note: Some tools have inconsistent `displayName` across sessions (e.g. `run_shell_command` sometimes shows as `"Shell"`, sometimes as `"run_shell_command"`). Always prefer `displayName` when present, fall back to `name`.
 
 ### Result Summary Fallback
 
@@ -123,5 +139,6 @@ If `result[].functionResponse.response.error` exists, override status to `FAILED
 - Missing `toolCalls`: default to empty list.
 - Missing `tokens`: default all counts to 0.
 - Missing `displayName` on a tool call: fall back to `name`.
-- `content` as string vs array on user messages: handle both.
-- Empty `result` array on tool call: use `resultDisplay` if available, otherwise `"ok"`.
+- `content` as string vs array on user messages: handle both (array of `{text}` objects is the common form, but plain string has been observed).
+- Empty `result` array on tool call (e.g. cancelled tools): use `resultDisplay` if available, otherwise `"ok"`.
+- `cancelled` tool status: tool was rejected by user at permission prompt. Result may contain an error message like `"[Operation Cancelled] Reason: User cancelled the operation."`.

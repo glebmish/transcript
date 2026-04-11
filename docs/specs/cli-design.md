@@ -25,9 +25,9 @@ transcript view [options] <input_file>
 
 Auto-detect by default:
 
-1. Try `json.load()` — if succeeds and has top-level `messages` array, it's Gemini.
-2. Otherwise read line-by-line as JSONL — if first valid line has `type` in `("user", "assistant")`, it's Claude.
-3. If neither matches, exit with error.
+1. Try `json.load()` — if succeeds, has top-level `messages` array, **and** has a `sessionId` field, it's Gemini.
+2. Otherwise read line-by-line as JSONL — if first valid JSON line has `type` field with value in `("user", "assistant", "system", "progress", "attachment")`, it's Claude.
+3. If neither matches, exit with error naming the file and what was found (e.g. "Could not detect format: <file> has no 'sessionId' field and no valid JSONL entries").
 
 `--format claude|gemini` overrides auto-detection.
 
@@ -39,7 +39,7 @@ Auto-detect by default:
 | `--no-tools` | show | Exclude tool calls entirely |
 | `--no-text` | show | Exclude assistant response text |
 | `--no-cost` | show | Exclude cost/token info from headers |
-| `--expand-tools` | collapsed | Show full tool output instead of compact summary |
+| `--expand-tools` | collapsed | Show full tool output instead of compact summary (no truncation — full output always shown) |
 
 Flags are `--no-*` because the default is to include everything. `--expand-tools` is the exception — default is compact.
 
@@ -57,8 +57,9 @@ Summary header, then messages separated by `---`. Each element is controlled by 
 - User messages: header with timestamp, then message text.
 - Assistant messages: header with timestamp (and token/cost info unless `--no-cost`), then thinking blocks (unless `--no-thinking`), then response text (unless `--no-text`), then tool call block (unless `--no-tools`).
 - Tool calls: fenced code block, one line per call (`ToolName: summary -> result`).
+- Compaction markers (Claude only): rendered as `--- conversation compacted ---` between messages.
 
-With `--expand-tools`, each tool call is followed by its full output, truncated at 200 lines with a `... (N more lines)` indicator.
+With `--expand-tools`, each tool call is followed by its full output. No truncation — the complete output is always included.
 
 ## Examples
 
@@ -84,5 +85,5 @@ transcript view session.jsonl
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Parse error (malformed input) |
+| 1 | Parse error (malformed input, unrecognized format) |
 | 2 | File not found |

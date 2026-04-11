@@ -125,6 +125,16 @@ When a tool call involves a file (Read, Write, Edit), the detail panel shows fil
 2. **Assistant only**: hide user messages, focus on what the agent did.
 3. **User only**: just the prompts.
 
+## Compaction Boundary
+
+When the parser encounters a `compact_boundary` system entry, it inserts a visual separator in the conversation:
+
+```
+| ─── conversation compacted ──────────────── |
+```
+
+Styled dim with a dashed line. This indicates that prior context was summarized and messages above this point may be incomplete or missing.
+
 ## Search
 
 `/` opens a search bar at the bottom with a scope selector:
