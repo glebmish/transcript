@@ -140,20 +140,26 @@ def parse(path: str) -> Transcript:
                 tokens_thinking=tokens.get("thoughts", 0),
             )
 
-            content = entry.get("content", "")
-            if isinstance(content, str) and content.strip():
-                msg.text.append(content.strip())
-
             for thought in entry.get("thoughts", []):
                 desc = thought.get("description", "")
                 if desc.strip():
+                    idx = len(msg.thinking)
                     msg.thinking.append(desc.strip())
+                    msg.content_order.append(("thinking", idx))
+
+            content = entry.get("content", "")
+            if isinstance(content, str) and content.strip():
+                idx = len(msg.text)
+                msg.text.append(content.strip())
+                msg.content_order.append(("text", idx))
 
             for tc in entry.get("toolCalls", []):
                 name = tc.get("name", "?")
                 display_name = tc.get("displayName") or name
                 summary = _tool_summary(name, tc.get("args", {}))
                 result_summary, result_full, status = _extract_result(tc)
+                tool_idx = len(msg.tool_calls)
+                msg.content_order.append(("tool", tool_idx))
                 msg.tool_calls.append(ToolCall(
                     name=name,
                     display_name=display_name,

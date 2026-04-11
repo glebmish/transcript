@@ -6,17 +6,16 @@ from textual.events import Key
 from transcript.model import Transcript
 from transcript.tui.widgets import (
     ConversationPanel, DetailPanel, ToolCallWidget, ThinkingWidget,
-    MessageHeaderWidget, MessageTextWidget,
+    MessageHeaderWidget, MessageTextWidget, GutterRow,
 )
 
 # All focusable block types in the conversation panel
-_BLOCK_TYPES = (MessageHeaderWidget, MessageTextWidget, ThinkingWidget, ToolCallWidget)
-_BLOCK_SELECTOR = "MessageHeaderWidget, MessageTextWidget, ThinkingWidget, ToolCallWidget"
+_BLOCK_SELECTOR = "GutterRow"
 
 
 class TranscriptApp(App):
     CSS = """
-    Horizontal { height: 1fr; }
+    #main-split { height: 1fr; }
     ConversationPanel { width: 2fr; overflow-y: auto; }
     DetailPanel { width: 1fr; overflow-y: auto; border: solid gray; }
     #search-bar { dock: bottom; display: none; }
@@ -46,7 +45,7 @@ class TranscriptApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Horizontal():
+        with Horizontal(id="main-split"):
             yield ConversationPanel(self.transcript)
             yield DetailPanel()
         yield Input(placeholder="Search...", id="search-bar")

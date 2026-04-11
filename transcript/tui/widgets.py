@@ -1,70 +1,90 @@
+import textwrap
 from textual.widgets import Static, Input
-from textual.containers import VerticalScroll
+from textual.containers import VerticalScroll, Horizontal
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from transcript.model import Status, Role, Message, Transcript, ToolCall
 from pathlib import Path
 
 
-_GUTTER = "  "  # 2-space gutter, replaced by ▶ on focus
-_POINTER = "\u25b6 "
+_POINTER = "\u25b6"  # ▶
 
 
-class _FocusableBlock(Static):
-    """Base for blocks that show a pointer when focused."""
+class GutterRow(Horizontal):
+    """A row with a fixed 2-char gutter + content. Focus lives on the row."""
 
-    def __init__(self, content: str, **kwargs):
+    DEFAULT_CSS = """
+    GutterRow {
+        height: auto;
+    }
+    GutterRow > .gutter {
+        width: 2;
+        min-width: 2;
+        max-width: 2;
+        height: 1;
+    }
+    GutterRow > .content {
+        width: 1fr;
+    }
+    """
+
+    def __init__(self, gutter_text: str, content: str, **kwargs):
+        super().__init__(**kwargs)
+        self._gutter_text = gutter_text
         self._raw_content = content
-        super().__init__(_GUTTER + content, **kwargs)
         self.can_focus = True
+
+    def compose(self):
+        yield Static(self._gutter_text, classes="gutter", id=f"g-{id(self)}")
+        yield Static(self._raw_content, classes="content", id=f"c-{id(self)}")
 
     @property
     def searchable_text(self) -> str:
         return self._raw_content
 
+    def _gutter_widget(self):
+        return self.query_one(f"#g-{id(self)}", Static)
+
     def on_focus(self):
-        self.update(_POINTER + self._raw_content)
+        self._gutter_widget().update(f"{_POINTER} ")
         self.styles.background = "#333333"
 
     def on_blur(self):
-        self.update(_GUTTER + self._raw_content)
+        self._gutter_widget().update(self._gutter_text)
         self.styles.background = "transparent"
 
 
-class MessageHeaderWidget(_FocusableBlock):
+class MessageHeaderWidget(GutterRow):
     """A message header (User/Assistant) that can receive focus."""
 
     def __init__(self, content: str, **kwargs):
-        # Strip leading newline — rendered as margin-top instead
-        self._raw_content = content.lstrip("\n")
-        super(_FocusableBlock, self).__init__(_GUTTER + self._raw_content, **kwargs)
-        self.can_focus = True
+        super().__init__("  ", content, **kwargs)
         self.styles.margin = (1, 0, 0, 0)
 
 
-class MessageTextWidget(_FocusableBlock):
+class MessageTextWidget(GutterRow):
     """A message text block that can receive focus."""
-    pass
+
+    def __init__(self, content: str, **kwargs):
+        super().__init__("  ", content, **kwargs)
 
 
-class ToolCallWidget(Static):
+class ToolCallWidget(GutterRow):
     """A single tool call line that can be focused and expanded."""
 
     def __init__(self, tool_call: ToolCall, **kwargs):
         self.tool_call = tool_call
         if tool_call.status == Status.FAILED:
-            marker = "[red]\u2718[/red]"
+            gutter = "[red]\u2718[/red] "
         elif tool_call.status == Status.CANCELLED:
-            marker = "[yellow]~[/yellow]"
+            gutter = "[yellow]~[/yellow] "
         else:
-            marker = "[dim]\u2502[/dim]"
-        self._marker = marker
-        self._label = (
+            gutter = "[grey50]\u2502[/grey50] "
+        label = (
             f"[bold]{tool_call.display_name}[/bold] {tool_call.summary} "
             f"[dim]\u2192 {tool_call.result_summary}  \\[>][/dim]"
         )
-        super().__init__(f"{marker} {self._label}", **kwargs)
-        self.can_focus = True
+        super().__init__(gutter, label, **kwargs)
         if tool_call.status == Status.FAILED:
             self.styles.color = "red"
         elif tool_call.status == Status.CANCELLED:
@@ -74,51 +94,47 @@ class ToolCallWidget(Static):
     def searchable_text(self) -> str:
         return f"{self.tool_call.display_name} {self.tool_call.summary} {self.tool_call.result_summary}"
 
-    def on_focus(self):
-        self.update(f"{_POINTER}{self._label}")
-        self.styles.background = "#333333"
 
-    def on_blur(self):
-        self.update(f"{self._marker} {self._label}")
-        self.styles.background = "transparent"
-
-
-class ThinkingWidget(Static):
+class ThinkingWidget(GutterRow):
     """A collapsible thinking block."""
+
+    _GREY_BAR = "[grey50]\u2502[/grey50] "
 
     def __init__(self, text: str, **kwargs):
         self._full_text = text
         self._collapsed = True
         lines = text.strip().split("\n")
         self._line_count = len(lines)
-        super().__init__(_GUTTER + self._collapsed_text(), **kwargs)
-        self.can_focus = True
+        super().__init__(self._GREY_BAR, self._collapsed_text(), **kwargs)
 
     def _collapsed_text(self):
-        return f"[grey50]\u2502[/grey50] [dim italic]Thinking ({self._line_count} lines)  \\[>][/dim italic]"
+        return f"[dim italic]Thinking ({self._line_count} lines)  \\[>][/dim italic]"
 
     def _expanded_text(self):
         lines = self._full_text.strip().split("\n")
-        rendered = "\n".join(f"  [grey50]\u2502[/grey50] [dim italic]{line}[/dim italic]" for line in lines)
-        return f"[grey50]\u2502[/grey50] [dim italic]Thinking[/dim italic]\n{rendered}"
+        rendered = "\n".join(f"[dim italic]{line}[/dim italic]" for line in lines)
+        return f"[dim italic]Thinking[/dim italic]\n{rendered}"
+
+    def _content_widget(self):
+        return self.query_one(f"#c-{id(self)}", Static)
 
     def _current_text(self):
         return self._collapsed_text() if self._collapsed else self._expanded_text()
 
     def toggle(self):
         self._collapsed = not self._collapsed
-        self.update(_GUTTER + self._current_text())
+        self._content_widget().update(self._current_text())
 
     @property
     def searchable_text(self) -> str:
         return self._full_text
 
     def on_focus(self):
-        self.update(_POINTER + self._current_text())
+        self._gutter_widget().update(f"{_POINTER} ")
         self.styles.background = "#333333"
 
     def on_blur(self):
-        self.update(_GUTTER + self._current_text())
+        self._gutter_widget().update(self._GREY_BAR)
         self.styles.background = "transparent"
 
     @property
@@ -132,13 +148,13 @@ class ConversationPanel(VerticalScroll):
     def __init__(self, transcript: Transcript, **kwargs):
         super().__init__(**kwargs)
         self.transcript = transcript
-        self._visibility = 0  # 0=all, 1=assistant, 2=user
+        self._visibility = 0  # 0=all, 1=messages only, 2=user+tools
 
     def compose(self):
         yield self._render_header()
         for msg in self.transcript.messages:
             if msg.is_compaction_marker:
-                yield Static(f"{_GUTTER}[dim]\u2500\u2500\u2500 conversation compacted \u2500\u2500\u2500[/dim]")
+                yield Static("  [dim]\u2500\u2500\u2500 conversation compacted \u2500\u2500\u2500[/dim]")
                 continue
             yield from self._render_message(msg)
 
@@ -165,23 +181,31 @@ class ConversationPanel(VerticalScroll):
         else:
             dur = f"{total_s}s"
 
-        user_c = sum(1 for m in t.messages if m.role == Role.USER and not m.is_compaction_marker)
+        user_c = sum(1 for m in t.messages if m.role == Role.USER and not m.is_compaction_marker and not m.command_name)
         asst_c = sum(1 for m in t.messages if m.role == Role.ASSISTANT)
 
         header = (
-            f"{_GUTTER}[bold]# Transcript[/bold]\n"
-            f"{_GUTTER}[dim]Duration: {dur} \u00b7 {model_str}\n"
-            f"{_GUTTER}Messages: {user_c + asst_c} \u00b7 Tools: {total_tools}{failed_str} \u00b7 {cost_str}[/dim]"
+            f"  [bold]# Transcript[/bold]\n"
+            f"  [dim]Duration: {dur} \u00b7 {model_str}\n"
+            f"  Messages: {user_c + asst_c} \u00b7 Tools: {total_tools}{failed_str} \u00b7 {cost_str}[/dim]"
         )
         return Static(header)
 
     def _render_message(self, msg: Message):
         ts_str = msg.timestamp.strftime("%H:%M:%S")
+
+        if msg.command_name:
+            cmd_label = f"'{msg.command_name}' command" if msg.command_name != "(command output)" else "command output"
+            yield MessageHeaderWidget(f"[bold green]## User ({cmd_label}) \u00b7 {ts_str}[/bold green]")
+            for t in msg.text:
+                dedented = "\n".join(line.strip() for line in t.splitlines())
+                yield MessageTextWidget(f"[magenta]{dedented}[/magenta]")
+            return
+
         if msg.role == Role.USER:
-            yield MessageHeaderWidget(f"\n[bold green]## User \u00b7 {ts_str}[/bold green]")
+            yield MessageHeaderWidget(f"[bold green]## User \u00b7 {ts_str}[/bold green]")
             for t in msg.text:
                 yield MessageTextWidget(t)
-            # mode 2: user messages + tools — show tool calls after user turns too
             if self._visibility == 2:
                 return
         else:
@@ -191,9 +215,9 @@ class ConversationPanel(VerticalScroll):
                     yield ToolCallWidget(tc)
                 return
 
-            header = f"\n[bold cyan]## Assistant \u00b7 {ts_str}[/bold cyan]"
+            header = f"[bold cyan]## Assistant \u00b7 {ts_str}[/bold cyan]"
             if msg.tokens_in or msg.tokens_out:
-                header += f" [dim]\u00b7 ^{msg.tokens_in:,} v{msg.tokens_out:,}[/dim]"
+                header += f" [dim]\u00b7 \u2191{msg.tokens_in:,} \u2193{msg.tokens_out:,}[/dim]"
             yield MessageHeaderWidget(header)
 
             # mode 1: messages only — skip thinking and tools
@@ -202,14 +226,22 @@ class ConversationPanel(VerticalScroll):
                     yield MessageTextWidget(t)
                 return
 
-            for t in msg.thinking:
-                yield ThinkingWidget(t)
-
-            for t in msg.text:
-                yield MessageTextWidget(t)
-
-            for tc in msg.tool_calls:
-                yield ToolCallWidget(tc)
+            # Use content_order to preserve interleaved sequence
+            if msg.content_order:
+                for kind, idx in msg.content_order:
+                    if kind == "thinking" and idx < len(msg.thinking):
+                        yield ThinkingWidget(msg.thinking[idx])
+                    elif kind == "text" and idx < len(msg.text):
+                        yield MessageTextWidget(msg.text[idx])
+                    elif kind == "tool" and idx < len(msg.tool_calls):
+                        yield ToolCallWidget(msg.tool_calls[idx])
+            else:
+                for t in msg.thinking:
+                    yield ThinkingWidget(t)
+                for t in msg.text:
+                    yield MessageTextWidget(t)
+                for tc in msg.tool_calls:
+                    yield ToolCallWidget(tc)
 
     def toggle_thinking(self):
         for w in self.query(ThinkingWidget):
@@ -224,7 +256,7 @@ class ConversationPanel(VerticalScroll):
         self.mount(self._render_header())
         for msg in self.transcript.messages:
             if msg.is_compaction_marker:
-                self.mount(Static(f"{_GUTTER}[dim]\u2500\u2500\u2500 conversation compacted \u2500\u2500\u2500[/dim]"))
+                self.mount(Static("  [dim]\u2500\u2500\u2500 conversation compacted \u2500\u2500\u2500[/dim]"))
                 continue
             for w in self._render_message(msg):
                 self.mount(w)

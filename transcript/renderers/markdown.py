@@ -51,7 +51,7 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
 
     lines: list[str] = []
 
-    user_count = sum(1 for m in msgs if m.role == Role.USER and not m.is_compaction_marker)
+    user_count = sum(1 for m in msgs if m.role == Role.USER and not m.is_compaction_marker and not m.command_name)
     asst_count = sum(1 for m in msgs if m.role == Role.ASSISTANT)
     total_msgs = user_count + asst_count
     ts = transcript.tool_stats
@@ -80,6 +80,11 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
             lines.append("--- conversation compacted ---")
             continue
 
+        if m.command_name:
+            lines.append("")
+            lines.append(f"*`{m.command_name}` \u00b7 {_fmt_ts(m.timestamp)}*")
+            continue
+
         lines.append("")
         lines.append("---")
         lines.append("")
@@ -98,33 +103,57 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
 
         lines.append("")
 
-        if opts.show_thinking:
-            for t in m.thinking:
-                for tline in t.split("\n"):
-                    lines.append(f"> {tline}")
-                lines.append("")
-
-        if opts.show_text:
-            for t in m.text:
-                lines.append(t)
-                lines.append("")
-
-        if opts.show_tools and m.tool_calls:
-            if opts.expand_tools:
-                for tc in m.tool_calls:
-                    marker = "x " if tc.status == Status.FAILED else "~ " if tc.status == Status.CANCELLED else "  "
-                    lines.append(f"{marker}{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
-                    if tc.result_full:
-                        lines.append("")
-                        lines.append("```")
-                        lines.append(tc.result_full)
-                        lines.append("```")
+        if m.role == Role.ASSISTANT and m.content_order:
+            for kind, idx in m.content_order:
+                if kind == "thinking" and opts.show_thinking and idx < len(m.thinking):
+                    for tline in m.thinking[idx].split("\n"):
+                        lines.append(f"> {tline}")
                     lines.append("")
-            else:
-                lines.append("```")
-                for tc in m.tool_calls:
-                    lines.append(f"{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
-                lines.append("```")
-                lines.append("")
+                elif kind == "text" and opts.show_text and idx < len(m.text):
+                    lines.append(m.text[idx])
+                    lines.append("")
+                elif kind == "tool" and opts.show_tools and idx < len(m.tool_calls):
+                    tc = m.tool_calls[idx]
+                    if opts.expand_tools:
+                        marker = "x " if tc.status == Status.FAILED else "~ " if tc.status == Status.CANCELLED else "  "
+                        lines.append(f"{marker}{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
+                        if tc.result_full:
+                            lines.append("")
+                            lines.append("```")
+                            lines.append(tc.result_full)
+                            lines.append("```")
+                        lines.append("")
+                    else:
+                        lines.append(f"`{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}`")
+                        lines.append("")
+        else:
+            if opts.show_thinking:
+                for t in m.thinking:
+                    for tline in t.split("\n"):
+                        lines.append(f"> {tline}")
+                    lines.append("")
+
+            if opts.show_text:
+                for t in m.text:
+                    lines.append(t)
+                    lines.append("")
+
+            if opts.show_tools and m.tool_calls:
+                if opts.expand_tools:
+                    for tc in m.tool_calls:
+                        marker = "x " if tc.status == Status.FAILED else "~ " if tc.status == Status.CANCELLED else "  "
+                        lines.append(f"{marker}{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
+                        if tc.result_full:
+                            lines.append("")
+                            lines.append("```")
+                            lines.append(tc.result_full)
+                            lines.append("```")
+                        lines.append("")
+                else:
+                    lines.append("```")
+                    for tc in m.tool_calls:
+                        lines.append(f"{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
+                    lines.append("```")
+                    lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

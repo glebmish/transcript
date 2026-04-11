@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
@@ -39,6 +40,15 @@ def _tool_summary(name: str, input_data: dict) -> str:
     return "?"
 
 
+_CMD_NAME_RE = re.compile(r"<command-name>(.*?)</command-name>")
+
+
+def _extract_command_name(content: str) -> str | None:
+    """Extract slash command name from local_command content XML."""
+    m = _CMD_NAME_RE.search(content)
+    return m.group(1) if m else None
+
+
 def _tool_result_summary(tool_use_result) -> tuple[str, Status]:
     if tool_use_result is None:
         return "ok", Status.PASSED
@@ -63,10 +73,17 @@ def _tool_result_summary(tool_use_result) -> tuple[str, Status]:
     return "ok", Status.PASSED
 
 
+def _finalize_assistant(msg: Message) -> None:
+    """Remove unresolved tool placeholders from content_order."""
+    msg.content_order = [e for e in msg.content_order if e[1] != -1]
+
+
 def parse(path: str) -> Transcript:
     messages: list[Message] = []
     current_assistant: Message | None = None
     pending_tool_uses: dict[str, dict] = {}
+    # Maps tool_use id -> index in content_order where ("tool", ?) will go
+    pending_tool_order: dict[str, int] = {}
     seen_msg_ids: set[str] = set()
 
     with open(path) as f:
@@ -86,16 +103,33 @@ def parse(path: str) -> Transcript:
                 subtype = entry.get("subtype", "")
                 if subtype == "compact_boundary":
                     if current_assistant:
+                        _finalize_assistant(current_assistant)
                         messages.append(current_assistant)
                         current_assistant = None
                         pending_tool_uses = {}
+                        pending_tool_order = {}
                     messages.append(Message(
                         role=Role.USER,
                         timestamp=_parse_ts(entry.get("timestamp", "")),
                         is_compaction_marker=True,
                         text=["Conversation compacted"],
                     ))
-                elif subtype not in ("api_error", "turn_duration", "local_command", "bridge_status"):
+                elif subtype == "local_command":
+                    cmd_name = _extract_command_name(entry.get("content", ""))
+                    if cmd_name:
+                        if current_assistant:
+                            _finalize_assistant(current_assistant)
+                            messages.append(current_assistant)
+                            current_assistant = None
+                            pending_tool_uses = {}
+                            pending_tool_order = {}
+                        messages.append(Message(
+                            role=Role.USER,
+                            timestamp=_parse_ts(entry.get("timestamp", "")),
+                            command_name=cmd_name,
+                            text=[cmd_name],
+                        ))
+                elif subtype not in ("api_error", "turn_duration", "bridge_status"):
                     print(f"Warning: unknown system subtype '{subtype}' at line {line_num}", file=sys.stderr)
                 continue
 
@@ -127,6 +161,7 @@ def parse(path: str) -> Transcript:
                                 if not result_str.startswith("FAILED"):
                                     result_str = f"FAILED: {result_str}"
                             if current_assistant:
+                                tool_idx = len(current_assistant.tool_calls)
                                 current_assistant.tool_calls.append(ToolCall(
                                     name=tu["name"],
                                     display_name=tu["name"],
@@ -135,13 +170,19 @@ def parse(path: str) -> Transcript:
                                     result_full=result_full,
                                     status=status,
                                 ))
+                                # Fill in the content_order placeholder
+                                if tool_use_id in pending_tool_order:
+                                    order_pos = pending_tool_order.pop(tool_use_id)
+                                    current_assistant.content_order[order_pos] = ("tool", tool_idx)
                         continue
 
                 # Actual user message
                 if current_assistant:
+                    _finalize_assistant(current_assistant)
                     messages.append(current_assistant)
                     current_assistant = None
                     pending_tool_uses = {}
+                    pending_tool_order = {}
                     seen_msg_ids.clear()
 
                 text_content = ""
@@ -152,7 +193,16 @@ def parse(path: str) -> Transcript:
                         b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
                     )
                 if text_content.strip():
-                    messages.append(Message(role=Role.USER, timestamp=ts, text=[text_content.strip()]))
+                    cmd_name = _extract_command_name(text_content)
+                    stripped = text_content.strip()
+                    if not cmd_name and (stripped.startswith("<local-command-caveat>") or stripped.startswith("<local-command-stdout>")):
+                        cmd_name = "(command output)"
+                    messages.append(Message(
+                        role=Role.USER,
+                        timestamp=ts,
+                        text=[stripped],
+                        command_name=cmd_name,
+                    ))
 
             elif entry_type == "assistant":
                 msg = entry.get("message", {})
@@ -196,17 +246,25 @@ def parse(path: str) -> Transcript:
                         if btype == "thinking":
                             text = block.get("thinking", "")
                             if text.strip():
+                                idx = len(current_assistant.thinking)
                                 current_assistant.thinking.append(text.strip())
+                                current_assistant.content_order.append(("thinking", idx))
                         elif btype == "text":
                             text = block.get("text", "")
                             if text.strip():
+                                idx = len(current_assistant.text)
                                 current_assistant.text.append(text.strip())
+                                current_assistant.content_order.append(("text", idx))
                         elif btype == "tool_use":
                             tu_id = block.get("id", "")
                             pending_tool_uses[tu_id] = block
+                            # Reserve a slot; will be filled when result arrives
+                            pending_tool_order[tu_id] = len(current_assistant.content_order)
+                            current_assistant.content_order.append(("tool", -1))
 
     if current_assistant:
         for tu_id, tu in pending_tool_uses.items():
+            tool_idx = len(current_assistant.tool_calls)
             current_assistant.tool_calls.append(ToolCall(
                 name=tu["name"],
                 display_name=tu["name"],
@@ -215,6 +273,10 @@ def parse(path: str) -> Transcript:
                 result_full="",
                 status=Status.FAILED,
             ))
+            if tu_id in pending_tool_order:
+                order_pos = pending_tool_order[tu_id]
+                current_assistant.content_order[order_pos] = ("tool", tool_idx)
+        _finalize_assistant(current_assistant)
         messages.append(current_assistant)
 
     return _build_transcript(messages)

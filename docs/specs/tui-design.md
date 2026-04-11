@@ -26,7 +26,7 @@ All content in the conversation panel has a fixed 2-character gutter on the left
 | ▶ ## User · 14:02:03                               |                          |
 |   Help me refactor auth                            |                          |
 |                                                    |                          |
-|   ## Assistant · 14:02:08 · ^12k v1.2k             |                          |
+|   ## Assistant · 14:02:08 · ↑12k ↓1.2k             |                          |
 |   > Thinking (3 lines)                       [>]   |                          |
 |                                                    |                          |
 |   I'll start by reading the middleware.            |                          |
@@ -155,6 +155,32 @@ When the parser encounters a `compact_boundary` system entry, it inserts a visua
 
 Styled dim. Not focusable.
 
+## Local Commands
+
+Slash commands (`/clear`, `/model`, etc.) parsed from `local_command` system entries are rendered with their own widget:
+
+```
+  $ /model · 14:02:30
+  $ /clear · 14:02:45
+```
+
+Styled italic magenta with `$` prefix. Focusable. Not counted in the user message total.
+
+## Content Ordering
+
+Assistant messages preserve the interleaved order of thinking, text, and tool call blocks using the `content_order` field. When `content_order` is populated, the renderer iterates it instead of rendering thinking → text → tools in fixed order.
+
+Example: if the assistant wrote text, called a tool, then wrote more text, the conversation panel shows:
+
+```
+  ## Assistant · 14:02:08 · ↑12k ↓1.2k
+  I'll start by reading the middleware.
+  │ Read /src/auth.py → 84 lines             [>]
+  Now I'll look at the JWT validation.
+```
+
+This matches the actual sequence of the agent's actions.
+
 ## Search
 
 `/` opens a search input bar docked at the bottom.
@@ -174,7 +200,8 @@ Styled dim. Not focusable.
 | Tool call (passed) | bold name, dim result, dim `│` gutter |
 | Tool call (failed) | red text, red `✘` gutter |
 | Tool call (cancelled) | yellow text, yellow `~` gutter |
-| Token/cost info | dim |
+| Local command | italic magenta, `$ /cmd · time` format |
+| Token counts | dim, `↑in ↓out` arrows |
 | Focused block background | `#333333` |
 | Detail panel file content | syntax highlighted (monokai theme) |
 | Detail panel markdown | rich-rendered markdown |

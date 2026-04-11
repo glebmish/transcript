@@ -37,6 +37,10 @@ class Message:
     text: list[str] = field(default_factory=list)
     tool_calls: list[ToolCall] = field(default_factory=list)
     is_compaction_marker: bool = False
+    command_name: str | None = None
+    # Tracks interleaved content order: ("thinking", idx), ("text", idx), ("tool", idx)
+    # When non-empty, renderers should iterate this instead of separate lists.
+    content_order: list[tuple[str, int]] = field(default_factory=list)
 
 
 @dataclass

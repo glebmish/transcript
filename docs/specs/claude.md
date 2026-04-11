@@ -27,7 +27,7 @@ System entries have a `subtype` field. Handling:
 | `compact_boundary` | Insert a visual separator in the transcript | Marks where conversation was compacted — indicates context was summarized and prior messages may be incomplete |
 | `api_error` | Skip | Transient API errors with retries — not part of the conversation |
 | `turn_duration` | Skip | Internal timing metadata (`durationMs`, `messageCount`) |
-| `local_command` | Skip | Local slash-command output (e.g. `/plugins reload`) |
+| `local_command` | Parse command name; create `Message` with `command_name` set | Local slash-commands (e.g. `/clear`, `/model`) — see below |
 | `bridge_status` | Skip | Remote Control activation status |
 | Unknown subtypes | Skip with warning to stderr |
 
@@ -135,6 +135,55 @@ Message(
 ```
 
 Renderers check `is_compaction_marker` and render a visual separator instead of a normal message.
+
+## Local Command Handling
+
+Local slash commands (e.g. `/clear`, `/model`) appear in logs in two places:
+
+1. **System entries** with `subtype: "local_command"` — `content` may contain `<command-name>/foo</command-name>` XML, or just `<local-command-stdout>...</local-command-stdout>`.
+2. **User entries** — the same XML tags appear in the user message text content. `<local-command-caveat>` precedes the command, `<command-name>` carries the command itself, and `<local-command-stdout>` carries output.
+
+Both sources produce `Message` objects with `command_name` set:
+
+- If the text contains a `<command-name>` tag: `command_name` is the extracted name (e.g. `"/clear"`).
+- If the text starts with `<local-command-caveat>` or `<local-command-stdout>`: `command_name` is `"(command output)"`.
+- The full XML text is preserved in `Message.text` — the transcript tool's primary goal is full visibility into agent session internals.
+
+```python
+Message(
+    role=Role.USER,
+    timestamp=entry_timestamp,
+    command_name="/clear",    # or "(command output)" for caveat/stdout entries
+    text=["<command-name>/clear</command-name>..."],  # raw text preserved
+)
+```
+
+Messages with `command_name` set are not counted in the user message total.
+
+## Content Ordering
+
+Within an assistant turn, content blocks (thinking, text, tool calls) are interleaved across multiple JSONL entries. A single turn flows:
+
+```
+assistant entry: [thinking, text, tool_use]
+user entry: tool_result
+assistant entry: [text, tool_use]
+user entry: tool_result
+assistant entry: [text]
+```
+
+All of this merges into one `Message`. The `content_order` field tracks the original sequence:
+
+```python
+content_order: list[tuple[str, int]]
+# e.g. [("thinking", 0), ("text", 0), ("tool", 0), ("text", 1), ("tool", 1), ("text", 2)]
+```
+
+Each tuple is `(kind, index)` where `kind` is `"thinking"`, `"text"`, or `"tool"`, and `index` points into the corresponding list (`thinking[0]`, `text[0]`, `tool_calls[0]`, etc.).
+
+Tool use blocks reserve a placeholder `("tool", -1)` in `content_order` when the `tool_use` block is seen. The placeholder is filled with the real index when the matching `tool_result` arrives. Unresolved placeholders are removed when the message is finalized.
+
+Renderers should iterate `content_order` when non-empty to preserve the interleaved sequence. When empty (e.g. older data), fall back to the legacy order: thinking → text → tools.
 
 ## Out of Scope
 
