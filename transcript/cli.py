@@ -63,7 +63,7 @@ def main():
     if is_view:
         from transcript.tui.app import TranscriptApp
         app = TranscriptApp(transcript)
-        app.run()
+        app.run(mouse=False)
         return
 
     options = RenderOptions(

@@ -23,6 +23,7 @@ class TranscriptApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
+        Binding("ctrl+c", "quit", show=False),
         Binding("t", "toggle_thinking", "Thinking"),
         Binding("h", "cycle_visibility", "Show: all"),
         Binding("up", "prev_block", "Up", show=False, priority=True),
