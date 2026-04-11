@@ -34,13 +34,12 @@ class _FocusableBlock(Static):
 class MessageHeaderWidget(_FocusableBlock):
     """A message header (User/Assistant) that can receive focus."""
 
-    def on_focus(self):
-        self.update(_POINTER + self._raw_content.lstrip("\n"))
-        self.styles.background = "#333333"
-
-    def on_blur(self):
-        self.update(_GUTTER + self._raw_content)
-        self.styles.background = "transparent"
+    def __init__(self, content: str, **kwargs):
+        # Strip leading newline — rendered as margin-top instead
+        self._raw_content = content.lstrip("\n")
+        super(_FocusableBlock, self).__init__(_GUTTER + self._raw_content, **kwargs)
+        self.can_focus = True
+        self.styles.margin = (1, 0, 0, 0)
 
 
 class MessageTextWidget(_FocusableBlock):
@@ -96,12 +95,12 @@ class ThinkingWidget(Static):
         self.can_focus = True
 
     def _collapsed_text(self):
-        return f"[dim italic]> Thinking ({self._line_count} lines)  \\[>][/dim italic]"
+        return f"[grey50]\u2502[/grey50] [dim italic]Thinking ({self._line_count} lines)  \\[>][/dim italic]"
 
     def _expanded_text(self):
         lines = self._full_text.strip().split("\n")
-        rendered = "\n".join(f"  [dim italic]\u2502 {line}[/dim italic]" for line in lines)
-        return f"[dim italic]v Thinking[/dim italic]\n{rendered}"
+        rendered = "\n".join(f"  [grey50]\u2502[/grey50] [dim italic]{line}[/dim italic]" for line in lines)
+        return f"[grey50]\u2502[/grey50] [dim italic]Thinking[/dim italic]\n{rendered}"
 
     def _current_text(self):
         return self._collapsed_text() if self._collapsed else self._expanded_text()

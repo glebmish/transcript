@@ -52,7 +52,7 @@ All content blocks (headers, text, thinking, tool calls) are individually focusa
 
 - **Gutter**: Every block occupies a 2-char gutter column. Unfocused blocks show `  ` (spaces). Focused blocks show `▶ `.
 - **Background**: Focused blocks get a `#333333` background highlight. Unfocused blocks are transparent.
-- **Scroll**: `scroll_visible(top=True)` scrolls the top edge of the focused block into view, avoiding jumpy full-widget scrolling for large text blocks.
+- **Scroll**: `scroll_visible()` scrolls just enough to bring the focused block into view without jumping.
 
 ### Tab behavior
 
@@ -74,16 +74,16 @@ Tab switches focus between conversation and detail panels. When switching from c
 
 ## Thinking Blocks
 
-Collapsed by default. Show as:
+Collapsed by default. Show with grey `│` separator:
 
 ```
-  > Thinking (3 lines)                         [>]
+  │ Thinking (3 lines)                         [>]
 ```
 
 Press Enter to toggle inline. First Enter expands:
 
 ```
-  v Thinking
+  │ Thinking
   │ Let me look at the auth code first.
   │ The user wants to refactor the JWT
   │ validation middleware specifically.
@@ -93,7 +93,7 @@ Second Enter (when already expanded) sends full text to the detail panel.
 
 Press `t` to toggle all thinking blocks at once.
 
-Rendered with dim italic style and `│` left border on expanded lines.
+Rendered with grey `│` separator, dim italic text.
 
 ## Tool Calls
 
@@ -170,7 +170,7 @@ Styled dim. Not focusable.
 |---------|-------|
 | User header | bold green |
 | Assistant header | bold cyan |
-| Thinking block | dim italic, `│` left border when expanded |
+| Thinking block | grey `│` separator, dim italic text |
 | Tool call (passed) | bold name, dim result, dim `│` gutter |
 | Tool call (failed) | red text, red `✘` gutter |
 | Tool call (cancelled) | yellow text, yellow `~` gutter |

@@ -43,4 +43,4 @@ tests/
 - Claude's `input_tokens` is the uncached portion only; total context = `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
 - Tool use matching is ID-based (`tool_use.id` <-> `tool_result.tool_use_id`), not positional.
 - `--expand-tools` shows full output with no truncation.
-- Specs live in `docs/specs/`.
+- Specs live in `docs/specs/` and are living documents — update them when the implementation changes.

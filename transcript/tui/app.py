@@ -73,10 +73,10 @@ class TranscriptApp(App):
             idx = blocks.index(focused)
             if idx < len(blocks) - 1:
                 blocks[idx + 1].focus()
-                blocks[idx + 1].scroll_visible(top=True)
+                blocks[idx + 1].scroll_visible()
         else:
             blocks[0].focus()
-            blocks[0].scroll_visible(top=True)
+            blocks[0].scroll_visible()
 
     def action_prev_block(self):
         blocks = self._get_blocks()
@@ -87,10 +87,10 @@ class TranscriptApp(App):
             idx = blocks.index(focused)
             if idx > 0:
                 blocks[idx - 1].focus()
-                blocks[idx - 1].scroll_visible(top=True)
+                blocks[idx - 1].scroll_visible()
         else:
             blocks[-1].focus()
-            blocks[-1].scroll_visible(top=True)
+            blocks[-1].scroll_visible()
 
     def on_key(self, event: Key):
         if event.key == "enter":
@@ -131,7 +131,7 @@ class TranscriptApp(App):
             if self._last_conv_focus is not None:
                 try:
                     self._last_conv_focus.focus()
-                    self._last_conv_focus.scroll_visible(top=True)
+                    self._last_conv_focus.scroll_visible()
                     return
                 except Exception:
                     pass
@@ -172,7 +172,7 @@ class TranscriptApp(App):
             text = widget.searchable_text.lower() if hasattr(widget, 'searchable_text') else ""
             if query in text:
                 widget.focus()
-                widget.scroll_visible(top=True)
+                widget.scroll_visible()
                 return
 
     def action_show_help(self):
