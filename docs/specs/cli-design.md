@@ -2,7 +2,7 @@
 
 ## Entry Point
 
-`transcript` — installed as a console script or run via `python -m transcript`.
+`transcript` — installed as a console script via `pip install -e .`.
 
 ## Usage
 

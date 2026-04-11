@@ -8,13 +8,12 @@ CLI + TUI tool for converting Claude Code and Gemini CLI conversation logs into 
 # Run tests
 .venv/bin/pytest tests/ -v
 
-# Run the tool
-.venv/bin/python -m transcript <logfile>
-.venv/bin/python -m transcript view <logfile>
-
-# Or if installed
+# Run the tool (must be installed: pip install -e .)
 transcript <logfile>
+transcript view <logfile>
 ```
+
+- Always use `transcript` as a CLI command, never `python -m transcript`.
 
 ## Structure
 
