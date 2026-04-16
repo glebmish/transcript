@@ -37,27 +37,44 @@ A thin Go CLI wrapper over tmux. tmux handles all the hard problems (PTY allocat
 ## Architecture
 
 ```
-┌─────────────────────────┐
-│  tui-agent CLI (Go)     │
-│  - arg parsing (cobra)  │
-│  - output formatting    │
-│  - wait/poll logic      │
-│  - dirty diff logic     │
-│  - session tracking     │
-└────────┬────────────────┘
+┌──────────────────────────────┐
+│  tui-agent CLI (Go)          │
+│  - arg parsing (cobra)       │
+│  - output formatting         │
+│  - dirty diff logic          │
+│  - session tracking          │
+│  - key name translation      │
+└────────┬─────────────────────┘
          │ os/exec
          ▼
-┌─────────────────────────┐
-│  tmux                   │
-│  - PTY management       │
-│  - terminal emulation   │
-│  - screen capture       │
-│  - session lifecycle    │
-│  - split panes (visible)│
-└─────────────────────────┘
+┌──────────────────────────────┐
+│  tmux                        │
+│  - PTY management            │
+│  - terminal emulation        │
+│  - screen capture            │
+│  - session lifecycle         │
+│  - split panes (visible)     │
+│  - pipe-pane (PTY event tap) │
+└──────────┬───────────────────┘
+           │ pipe-pane
+           ▼
+┌──────────────────────────────┐
+│  FIFO (/tmp/tui-agent-*.fifo)│
+│  - raw PTY output stream     │
+│  - read by wait command      │
+│  - read by record daemon     │
+└──────────────────────────────┘
 ```
 
-No daemon, no socket protocol, no IPC. Each CLI invocation shells out to tmux. Session state lives in tmux's server (which manages its own lifecycle automatically).
+Each CLI invocation shells out to tmux for actions (send-keys, capture-pane, etc.). Session state lives in tmux's server (which manages its own lifecycle automatically).
+
+For event-driven smart wait and frame recording, the tool uses `tmux pipe-pane` to subscribe to PTY output events. On `start`, the CLI sets up a FIFO:
+
+```
+tmux pipe-pane -t <session> "cat > /tmp/tui-agent-<id>.fifo"
+```
+
+A long-lived watcher goroutine reads the FIFO. Any bytes arriving mean the screen is actively changing. This enables debounce-based settling detection without polling `capture-pane` in a tight loop.
 
 ## tmux command mapping
 
@@ -69,8 +86,8 @@ No daemon, no socket protocol, no IPC. Each CLI invocation shells out to tmux. S
 | `press <key>` | `send-keys -t <id> <key>` |
 | `type <text>` | `send-keys -t <id> -l <text>` |
 | `resize --cols N --rows N` | `resize-window -t <id> -x N -y N` |
-| `wait` | poll `capture-pane`, hash, compare, sleep 50ms, repeat |
-| `wait --text <pattern>` | poll `capture-pane`, regex match, sleep 50ms, repeat |
+| `wait` | watch FIFO for PTY silence (debounce), then `capture-pane` to confirm |
+| `wait --text <pattern>` | on each FIFO settle, `capture-pane` + regex match |
 | `kill` | `kill-session -t <id>` |
 | `list` | `list-sessions -F "#{session_name} #{session_created}"` |
 | `info` | `display-message -t <id> -p` with format strings |
@@ -95,39 +112,56 @@ Any unrecognized key name is passed through to tmux as-is.
 
 ## Features
 
-### 1. Smart wait (poll-based)
+### 1. Smart wait (event-driven via pipe-pane)
+
+On `start`, the CLI creates a FIFO and attaches it to the tmux pane's output:
+
+```bash
+mkfifo /tmp/tui-agent-<id>.fifo
+tmux pipe-pane -t <session> "cat > /tmp/tui-agent-<id>.fifo"
+```
+
+The `wait` command opens the FIFO and watches for activity:
 
 ```go
-func wait(sessionID string, timeout time.Duration, debounce time.Duration, pattern *regexp.Regexp) error {
-    lastHash := ""
-    stableCount := 0
+func wait(fifoPath, sessionID string, timeout, debounce time.Duration, pattern *regexp.Regexp) error {
+    f, _ := os.Open(fifoPath)
+    defer f.Close()
+    buf := make([]byte, 4096)
     deadline := time.Now().Add(timeout)
+    timer := time.NewTimer(debounce)
 
     for time.Now().Before(deadline) {
-        screen := capturePane(sessionID)
-        currentHash := hash(screen)
-
-        if pattern != nil && pattern.MatchString(screen) {
-            return nil // pattern matched
+        f.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+        n, _ := f.Read(buf)
+        if n > 0 {
+            timer.Reset(debounce) // activity — reset debounce
+            continue
         }
-
-        if currentHash == lastHash {
-            stableCount++
-            if stableCount >= 3 { // stable for 3 consecutive polls
-                return nil
+        select {
+        case <-timer.C:
+            // PTY has been silent for `debounce` duration — screen settled
+            if pattern != nil {
+                screen := capturePane(sessionID)
+                if pattern.MatchString(screen) {
+                    return nil
+                }
+                timer.Reset(debounce) // not matched yet, keep waiting
+                continue
             }
-        } else {
-            stableCount = 0
+            return nil
+        default:
         }
-
-        lastHash = currentHash
-        time.Sleep(debounce)
     }
     return ErrTimeout
 }
 ```
 
-Default: 50ms debounce, 3 stable polls required (screen unchanged for 150ms), 5s timeout. All configurable via flags.
+This is truly event-driven — no polling `capture-pane` in a loop. The FIFO receives bytes the instant the TUI writes to its PTY. The debounce timer fires only after real silence.
+
+Default: 100ms debounce, 5s timeout. Configurable via `--debounce` and `--timeout`.
+
+**Fallback:** If the FIFO is unavailable (e.g., pipe-pane failed), fall back to poll-based wait (capture-pane + hash comparison at 50ms intervals).
 
 ### 2. Dirty tracking
 
@@ -158,7 +192,9 @@ $ tui-agent press j
 $ tui-agent record stop --format json
 ```
 
-Between `record start` and `record stop`, the CLI runs a background goroutine that polls `capture-pane` at a configurable interval (default 50ms). Each time the screen changes, it stores a timestamped snapshot. `record stop` returns the collected frames.
+`record start` spawns a background process (same binary, internal `_record-daemon` subcommand) that watches the FIFO for PTY activity. Each time a render burst settles (debounce fires), it calls `capture-pane` and stores the timestamped snapshot. This captures exactly one frame per visual change — no blind polling.
+
+`record stop` signals the background process to dump collected frames and exit.
 
 Output:
 
@@ -172,9 +208,9 @@ Output:
 }
 ```
 
-For dirty recording (`record start --dirty`), only changed lines per frame are stored.
+For dirty recording (`record start --dirty`), only changed lines per frame are stored (diffed against previous frame).
 
-Implementation: `record start` writes a PID file and spawns a background process (same binary with an internal `_record-daemon` subcommand). `record stop` signals it to dump results and exit.
+The FIFO-based approach means recording has near-zero overhead when the screen is idle — no CPU spent on capture-pane calls until something actually changes.
 
 ### 4. Two operating modes
 
@@ -298,7 +334,6 @@ A Claude Code skill (`using-tui-agent`) that teaches the agent:
 1. **Name** — `tui-agent`? `tui-pilot`? `termview`? `tuictl`?
 2. **MCP server** — ship an MCP server wrapper alongside the CLI? Low effort given the CLI exists, and would allow direct tool-use integration without a skill.
 3. **Multiplexer detection** — should visible mode auto-detect the running multiplexer (check `$TMUX`, `$ZELLIJ`, etc.), or always require explicit `--multiplexer`?
-4. **Record implementation** — background goroutine (in-process) vs spawned subprocess? In-process is simpler but ties up the CLI process. Subprocess is more robust but needs IPC.
 
 ## Dependencies
 
