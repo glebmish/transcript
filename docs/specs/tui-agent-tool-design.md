@@ -11,7 +11,31 @@ AI coding agents (Claude Code, Codex, etc.) can drive browsers via browser-use t
 
 A CLI tool that gives AI agents the ability to start any TUI application, see its rendered screen (with style/color information), send input, and observe the results — enabling a visual feedback loop for TUI development, testing, and debugging.
 
-## Approach
+## Phased Approach
+
+### Phase 0: Validate with a skill (no tool)
+
+Before building anything, write a Claude Code skill that teaches the agent to use raw tmux commands for TUI interaction:
+
+```bash
+tmux new-session -d -s tui-test -x 120 -y 40 "python app.py"
+sleep 1
+tmux capture-pane -t tui-test -e -p        # styled capture
+tmux send-keys -t tui-test j                # send input
+sleep 0.3
+tmux capture-pane -t tui-test -e -p        # see what changed
+tmux kill-session -t tui-test
+```
+
+Use this skill for real TUI development work on the transcript project. Track:
+- How often the visual feedback changed the agent's output vs. code-only reasoning
+- Whether `sleep`-based waiting is sufficient or causes real problems
+- Whether the raw ANSI output is useful or too noisy
+- Which use cases actually arise (layout verification, glitch debugging, size testing, etc.)
+
+**Gate:** Only proceed to Phase 1 if the skill proves genuinely useful and the raw tmux workflow has friction that justifies a wrapper.
+
+### Phase 1: Go CLI wrapper over tmux
 
 A thin Go CLI wrapper over tmux. tmux handles all the hard problems (PTY allocation, terminal emulation, screen capture, session management) and has been battle-tested for 15+ years. The CLI provides a clean, agent-friendly interface on top.
 
@@ -270,15 +294,34 @@ If `--multiplexer` is not specified, detect from environment variables (`$TMUX`,
 - Visible mode requires any supported multiplexer (optional).
 - The visible pane is read-only — all interaction goes through the headless tmux session.
 
-### 5. Output formats
+### 5. Output formats and token economics
+
+Capture modes serve different purposes with different token costs:
+
+| Method | Tokens (120x40) | Best for |
+|---|---|---|
+| Plain text | ~1,200-1,500 | Text search, pattern matching, diffing |
+| Text + ANSI styles | ~3,000-5,000 | Focus/selection state, color-dependent logic |
+| Dirty tracking (text) | ~200-800 | Incremental updates, token-efficient iteration |
+| PNG screenshot | ~1,000-1,500 | Full visual fidelity, layout verification |
+
+**Key insight:** Screenshots are cheaper than styled text capture and carry full visual fidelity. But they're opaque — can't be searched, diffed, or dirty-tracked. The tool should support both, used for different questions:
+
+- **Text capture** for "what text is on screen?", "did this line change?", "find this pattern"
+- **Screenshots** for "what does this look like?", "is the layout correct?", "are the colors right?"
+
+Format flags:
 
 ```
 --format pretty    # default: bordered text with header/footer
 --format plain     # raw captured text, no decoration
 --format json      # structured JSON with metadata
+--format png       # screenshot as PNG image
 ```
 
-The `--color` flag is orthogonal — it controls whether ANSI escape sequences are preserved in the captured text. Works with all formats.
+The `--color` flag is orthogonal to text formats — controls whether ANSI escape sequences are preserved. Not applicable to `--format png`.
+
+**Screenshot implementation:** Render ANSI capture to an image. Options include piping `capture-pane -e` through an ANSI-to-image renderer (e.g., a Go library or `aha` + headless browser). The exact approach is an implementation detail — what matters is that `snapshot --format png` produces a file path the agent can read with its image tools.
 
 JSON output example:
 
@@ -315,7 +358,7 @@ Sessions are named with a prefix: `tui-agent-<label>` or `tui-agent-<random>`. T
 ```
 tui-agent start <cmd> [--cols N] [--rows N] [--cwd DIR] [--label NAME]
                       [--visible] [--multiplexer NAME]
-tui-agent snapshot [--color] [--dirty] [--format json|pretty|plain]
+tui-agent snapshot [--color] [--dirty] [--format json|pretty|plain|png]
 tui-agent wait [--timeout MS] [--text PATTERN] [--debounce MS]
 tui-agent type <text>
 tui-agent press <key>...
@@ -334,18 +377,37 @@ Global flags: `--session <id>` (override active session), `--json` (shorthand fo
 
 ## Integration: Claude Code Skill
 
-A Claude Code skill (`using-tui-agent`) that teaches the agent:
+Two skills, one per phase:
+
+### Phase 0 skill (`using-tmux-for-tui`)
+
+Teaches the agent the raw tmux workflow. No tool dependency. Includes:
+- Session creation with size control
+- `capture-pane -e -p` for styled capture
+- `send-keys` for input with key name reference
+- Sleep-based waiting (the simplest thing that works)
+- Cleanup patterns
+
+This skill is the validation vehicle. If it's useful, we build the tool. If not, we stop.
+
+### Phase 1 skill (`using-tui-agent`)
+
+Teaches the agent the CLI tool workflow:
 
 1. **When to use it** — developing/debugging TUI apps, verifying visual changes, testing keyboard navigation
 2. **The workflow pattern:**
    - Start the TUI at a reasonable size
-   - Snapshot to see current state (use `--color` to see focus/selection/active states)
-   - Plan actions based on what's visible
+   - `snapshot --format png` for initial visual overview (cheapest way to see the full picture)
+   - `snapshot --color` when you need to search/match text content
    - Send input, wait for settle, snapshot again
-   - Use `--dirty` for efficiency after the initial full snapshot
+   - Use `--dirty` for efficient incremental updates after the initial capture
    - Use `record` when debugging animations or transitions
    - Use `resize` to test responsive layouts
-3. **Token management** — prefer `--dirty` and `plain` format to minimize context usage
+3. **Token management:**
+   - Use PNG screenshots (~1k tokens) for visual verification
+   - Use plain text (~1.2k tokens) for text search and pattern matching
+   - Use `--dirty` (~200-800 tokens) for incremental updates
+   - Avoid styled text (~3-5k tokens) unless you specifically need ANSI color information
 4. **When to use visible mode** — when the user wants to watch, or for demos
 
 ## Non-Goals
@@ -355,7 +417,6 @@ A Claude Code skill (`using-tui-agent`) that teaches the agent:
 - **Mouse interaction** — TUI apps used from agents should be keyboard-driven. Mouse support may be added later but is not in scope.
 - **Remote sessions** — the tool and tmux run on the same machine. No SSH/remote PTY forwarding.
 - **Replacing tmux** — this is explicitly a wrapper, not a reimplementation. If tmux can do it, we shell out to tmux.
-- **Visual screenshots** — SVG/PNG rendering is out of scope for v1. Text + ANSI style is the primary capture mode. Can be added later if needed.
 
 ## Open Questions
 
