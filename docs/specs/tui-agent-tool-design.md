@@ -32,7 +32,7 @@ A thin Go CLI wrapper over tmux. tmux handles all the hard problems (PTY allocat
 - Trivial cross-compilation for Linux/macOS
 - Excellent CLI library support (cobra)
 - Native JSON marshaling
-- ~300-500 LOC for the core logic
+- ~1,500-2,500 LOC for the full tool (CLI, tmux integration, wait/record, dirty tracking, visible mode adapters)
 
 ## Architecture
 
@@ -240,11 +240,11 @@ tui-agent start "vim main.go" --visible
 tui-agent start "vim main.go" --visible --multiplexer zellij
 ```
 
-The headless tmux session still does all the real work (capture, wait, record). The visible pane is a **read-only mirror** — it runs `tmux attach -t <session> -r` inside a split pane of the user's multiplexer. This means:
+The headless tmux session still does all the real work (capture, wait, record). The visible pane is independently managed by the user's multiplexer — tmux is an invisible implementation detail. The tool opens a new pane in the user's multiplexer that shows the same underlying TUI. This means:
 
 - All agent interaction goes through the headless tmux session (consistent behavior)
-- The visible pane just displays what tmux is rendering (no dual-path logic)
-- Any multiplexer that can split and run a command can be a visible-mode target
+- The visible pane is purely a presentation concern — the user's multiplexer handles it natively
+- No tmux UI (status bar, key bindings) leaks into the visible experience
 
 The visible-mode adapter is minimal:
 
@@ -293,7 +293,20 @@ JSON output example:
 }
 ```
 
-### 6. Session management
+### 6. Process lifecycle
+
+When the TUI app exits:
+
+- The session remains alive (tmux `remain-on-exit` option). This avoids losing the final screen state.
+- `snapshot` continues to work — returns the last rendered screen.
+- `info` reports the process as exited, including the exit code.
+- `wait` resolves immediately if the process is already dead.
+- `press`/`type`/`paste` return an error ("process exited").
+- `kill` cleans up the session and all associated resources (FIFO, cache files).
+
+The agent can detect exit by checking `info` or by `wait` returning immediately after a command.
+
+### 7. Session management
 
 Sessions are named with a prefix: `tui-agent-<label>` or `tui-agent-<random>`. This avoids collisions with the user's own tmux sessions. `list` filters to only tui-agent sessions. `kill --all` cleans up all tui-agent sessions.
 
