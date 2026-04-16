@@ -216,7 +216,9 @@ The FIFO-based approach means recording has near-zero overhead when the screen i
 
 #### Headless mode (default)
 
-tmux sessions are created detached (`-d`). No visible terminal, no multiplexer needed in the user's view. tmux server starts automatically in the background.
+Always uses tmux. Sessions are created detached (`-d`). The tmux server starts automatically in the background — invisible to the user. All interaction (snapshot, send-keys, wait, record) goes through tmux.
+
+tmux is a hard dependency. It is the only multiplexer that supports all required capabilities: headless sessions, ANSI-styled capture, absolute resize, pipe-pane for PTY event streaming, and cross-platform support (Linux, macOS).
 
 ```
 tui-agent start "vim main.go" --cols 120 --rows 40
@@ -229,31 +231,44 @@ tui-agent snapshot --dirty --color
 tui-agent kill
 ```
 
-#### Visible mode
+#### Visible/demo mode
 
-The TUI is displayed in a split pane inside the user's existing multiplexer session.
+Displays the TUI in a split pane inside the user's current multiplexer so they can watch the agent work. For demos and collaborative debugging.
 
 ```
 tui-agent start "vim main.go" --visible
+tui-agent start "vim main.go" --visible --multiplexer zellij
 ```
 
-Implementation with tmux: `split-window -h -t $TMUX_PANE "vim main.go"` creates a side-by-side pane. The agent interacts with the new pane by its ID. The user sees updates in real time.
+The headless tmux session still does all the real work (capture, wait, record). The visible pane is a **read-only mirror** — it runs `tmux attach -t <session> -r` inside a split pane of the user's multiplexer. This means:
 
-For other multiplexers, the `--multiplexer` flag selects an adapter:
+- All agent interaction goes through the headless tmux session (consistent behavior)
+- The visible pane just displays what tmux is rendering (no dual-path logic)
+- Any multiplexer that can split and run a command can be a visible-mode target
+
+The visible-mode adapter is minimal:
 
 ```go
-type Multiplexer interface {
-    Split(cmd string, cols, rows int) (paneID string, err error)
-    Capture(paneID string, color bool) (string, error)
-    SendKeys(paneID string, keys ...string) error
-    Resize(paneID string, cols, rows int) error
+type VisibleAdapter interface {
+    Split(cmd string) (paneID string, err error)
     Close(paneID string) error
 }
 ```
 
-Built-in: `tmux`. The interface is open for `zellij`, `cmux`, etc.
+Built-in adapters and auto-detection:
 
-**Key constraint:** Headless mode always uses tmux (detached). Visible mode uses whatever multiplexer the user is running in.
+| Multiplexer | Detection | Split command |
+|---|---|---|
+| tmux | `$TMUX` set | `tmux split-window -h <cmd>` |
+| zellij | `$ZELLIJ` set | `zellij action new-pane -d right -- <cmd>` |
+| cmux | cmux CLI available | `cmux new-split right -- <cmd>` |
+
+If `--multiplexer` is not specified, detect from environment variables (`$TMUX`, `$ZELLIJ`). If none found and `--visible` requested, error with a clear message.
+
+**Key constraints:**
+- Headless mode requires tmux (hard dependency).
+- Visible mode requires any supported multiplexer (optional).
+- The visible pane is read-only — all interaction goes through the headless tmux session.
 
 ### 5. Output formats
 
@@ -333,7 +348,6 @@ A Claude Code skill (`using-tui-agent`) that teaches the agent:
 
 1. **Name** — `tui-agent`? `tui-pilot`? `termview`? `tuictl`?
 2. **MCP server** — ship an MCP server wrapper alongside the CLI? Low effort given the CLI exists, and would allow direct tool-use integration without a skill.
-3. **Multiplexer detection** — should visible mode auto-detect the running multiplexer (check `$TMUX`, `$ZELLIJ`, etc.), or always require explicit `--multiplexer`?
 
 ## Dependencies
 
