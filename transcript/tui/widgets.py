@@ -1,6 +1,7 @@
 import textwrap
 from textual.widgets import Static, Input
 from textual.containers import VerticalScroll, Horizontal
+from textual.content import Content
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from transcript.model import Status, Role, Message, Transcript, ToolCall
@@ -16,6 +17,7 @@ class GutterRow(Horizontal):
     DEFAULT_CSS = """
     GutterRow {
         height: auto;
+        padding: 0 1 0 0;
     }
     GutterRow > .gutter {
         width: 2;
@@ -25,6 +27,10 @@ class GutterRow(Horizontal):
     }
     GutterRow > .content {
         width: 1fr;
+    }
+    GutterRow:focus > .gutter,
+    GutterRow:focus > .content {
+        background: #333333;
     }
     """
 
@@ -47,11 +53,9 @@ class GutterRow(Horizontal):
 
     def on_focus(self):
         self._gutter_widget().update(f"{_POINTER} ")
-        self.styles.background = "#333333"
 
     def on_blur(self):
         self._gutter_widget().update(self._gutter_text)
-        self.styles.background = "transparent"
 
 
 class MessageHeaderWidget(GutterRow):
@@ -80,9 +84,15 @@ class ToolCallWidget(GutterRow):
             gutter = "[yellow]~[/yellow] "
         else:
             gutter = "[grey50]\u2502[/grey50] "
-        label = (
-            f"[bold]{tool_call.display_name}[/bold] {tool_call.summary} "
-            f"[dim]\u2192 {tool_call.result_summary}  \\[>][/dim]"
+        label = Content.assemble(
+            (tool_call.display_name, "bold"),
+            " ",
+            tool_call.summary,
+            " ",
+            Content.from_markup(
+                "[dim]\u2192 $summary  \\[>][/dim]",
+                summary=tool_call.result_summary,
+            ),
         )
         super().__init__(gutter, label, **kwargs)
         if tool_call.status == Status.FAILED:
@@ -131,11 +141,9 @@ class ThinkingWidget(GutterRow):
 
     def on_focus(self):
         self._gutter_widget().update(f"{_POINTER} ")
-        self.styles.background = "#333333"
 
     def on_blur(self):
         self._gutter_widget().update(self._GREY_BAR)
-        self.styles.background = "transparent"
 
     @property
     def collapsed(self):
