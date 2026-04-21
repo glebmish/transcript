@@ -81,10 +81,10 @@ def _finalize_assistant(msg: Message) -> None:
 def parse(path: str) -> Transcript:
     messages: list[Message] = []
     current_assistant: Message | None = None
+    current_msg_id: str | None = None
     pending_tool_uses: dict[str, dict] = {}
     # Maps tool_use id -> index in content_order where ("tool", ?) will go
     pending_tool_order: dict[str, int] = {}
-    seen_msg_ids: set[str] = set()
 
     with open(path) as f:
         for line_num, line_str in enumerate(f, 1):
@@ -106,6 +106,7 @@ def parse(path: str) -> Transcript:
                         _finalize_assistant(current_assistant)
                         messages.append(current_assistant)
                         current_assistant = None
+                        current_msg_id = None
                         pending_tool_uses = {}
                         pending_tool_order = {}
                     messages.append(Message(
@@ -121,6 +122,7 @@ def parse(path: str) -> Transcript:
                             _finalize_assistant(current_assistant)
                             messages.append(current_assistant)
                             current_assistant = None
+                            current_msg_id = None
                             pending_tool_uses = {}
                             pending_tool_order = {}
                         messages.append(Message(
@@ -181,9 +183,9 @@ def parse(path: str) -> Transcript:
                     _finalize_assistant(current_assistant)
                     messages.append(current_assistant)
                     current_assistant = None
+                    current_msg_id = None
                     pending_tool_uses = {}
                     pending_tool_order = {}
-                    seen_msg_ids.clear()
 
                 text_content = ""
                 if isinstance(content, str):
@@ -210,12 +212,16 @@ def parse(path: str) -> Transcript:
                 usage = msg.get("usage", {})
                 msg_id = msg.get("id")
 
-                if current_assistant is None:
+                # Start a new Message when msg_id changes (or no current assistant).
+                # Multiple streaming entries share msg_id: merge those with max().
+                # Distinct msg_ids are separate assistant turns: sum across them.
+                if current_assistant is None or (msg_id and msg_id != current_msg_id):
+                    if current_assistant is not None:
+                        _finalize_assistant(current_assistant)
+                        messages.append(current_assistant)
                     current_assistant = Message(role=Role.ASSISTANT, timestamp=ts, model=model)
+                    current_msg_id = msg_id
 
-                # Streaming: multiple entries share the same message.id with increasing
-                # usage values. Take the max seen for each field (final entry has full count).
-                #
                 # Claude's usage breakdown:
                 #   input_tokens = uncached, non-cache-write input (the billable portion)
                 #   cache_creation_input_tokens = tokens written to cache (treated as free)
@@ -225,7 +231,6 @@ def parse(path: str) -> Transcript:
                 # tokens_cached = cache_read + cache_creation (everything not charged)
                 # billable = tokens_in - tokens_cached = input_tokens
                 if msg_id:
-                    seen_msg_ids.add(msg_id)
                     raw_input = usage.get("input_tokens", 0)
                     cache_creation = usage.get("cache_creation_input_tokens", 0)
                     cache_read = usage.get("cache_read_input_tokens", 0)
