@@ -140,12 +140,13 @@ def parse(path: str) -> Transcript:
             ts = _parse_ts(entry.get("timestamp", ""))
 
             if entry_type == "user":
-                if isinstance(content, list) and content and isinstance(content[0], dict):
-                    block = content[0]
-                    if block.get("type") == "tool_result":
+                if isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get("type") == "tool_result":
+                    tool_use_result = entry.get("toolUseResult")
+                    for block in content:
+                        if not isinstance(block, dict) or block.get("type") != "tool_result":
+                            continue
                         tool_use_id = block.get("tool_use_id", "")
                         is_error = block.get("is_error", False)
-                        tool_use_result = entry.get("toolUseResult")
                         result_full = block.get("content", "")
                         if isinstance(result_full, list):
                             result_full = "\n".join(
@@ -170,11 +171,10 @@ def parse(path: str) -> Transcript:
                                     result_full=result_full,
                                     status=status,
                                 ))
-                                # Fill in the content_order placeholder
                                 if tool_use_id in pending_tool_order:
                                     order_pos = pending_tool_order.pop(tool_use_id)
                                     current_assistant.content_order[order_pos] = ("tool", tool_idx)
-                        continue
+                    continue
 
                 # Actual user message
                 if current_assistant:
