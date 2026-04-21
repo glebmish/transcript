@@ -51,8 +51,11 @@ class GutterRow(Horizontal):
     def _gutter_widget(self):
         return self.query_one(f"#g-{id(self)}", Static)
 
+    def _focused_gutter(self) -> str:
+        return f"{_POINTER} "
+
     def on_focus(self):
-        self._gutter_widget().update(f"{_POINTER} ")
+        self._gutter_widget().update(self._focused_gutter())
 
     def on_blur(self):
         self._gutter_widget().update(self._gutter_text)
@@ -104,6 +107,13 @@ class ToolCallWidget(GutterRow):
     def searchable_text(self) -> str:
         return f"{self.tool_call.display_name} {self.tool_call.summary} {self.tool_call.result_summary}"
 
+    def _focused_gutter(self) -> str:
+        if self.tool_call.status == Status.FAILED:
+            return f"{_POINTER}[red]✘[/red]"
+        if self.tool_call.status == Status.CANCELLED:
+            return f"{_POINTER}[yellow]~[/yellow]"
+        return f"{_POINTER} "
+
 
 class ThinkingWidget(GutterRow):
     """A collapsible thinking block."""
@@ -138,12 +148,6 @@ class ThinkingWidget(GutterRow):
     @property
     def searchable_text(self) -> str:
         return self._full_text
-
-    def on_focus(self):
-        self._gutter_widget().update(f"{_POINTER} ")
-
-    def on_blur(self):
-        self._gutter_widget().update(self._GREY_BAR)
 
     @property
     def collapsed(self):
