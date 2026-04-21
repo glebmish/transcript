@@ -36,6 +36,8 @@ class TranscriptApp(App):
         Binding("tab", "switch_panel_right", "Panel: right", priority=True),
         Binding("tab", "switch_panel_left", "Panel: left", priority=True),
         Binding("slash", "open_search", "Search"),
+        Binding("n", "next_match", show=False),
+        Binding("N", "prev_match", show=False),
         Binding("question_mark", "show_help", "Help"),
     ]
 
@@ -49,6 +51,8 @@ class TranscriptApp(App):
         self._search_visible = False
         self._visibility_index = 0
         self._last_conv_focus = None
+        self._last_query: str | None = None
+        self._last_match_index: int = -1
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -186,22 +190,50 @@ class TranscriptApp(App):
         search = self.query_one("#search-bar", Input)
         search.styles.display = "none"
         search.value = ""
+        search.border_title = ""
         self._search_visible = False
         self._focus_first_block()
+
+    def _find_matches(self, query: str):
+        conv = self.query_one(ConversationPanel)
+        return [
+            w for w in conv.query(_BLOCK_SELECTOR)
+            if hasattr(w, "searchable_text") and query in w.searchable_text.lower()
+        ]
 
     def on_input_submitted(self, event: Input.Submitted):
         query = event.value.strip().lower()
         if not query:
             self._hide_search()
             return
+        matches = self._find_matches(query)
+        search = self.query_one("#search-bar", Input)
+        if not matches:
+            self._last_query = None
+            self._last_match_index = -1
+            search.border_title = f"(0 results for {query!r})"
+            return
+        self._last_query = query
+        self._last_match_index = 0
         self._hide_search()
-        conv = self.query_one(ConversationPanel)
-        for widget in conv.query(_BLOCK_SELECTOR):
-            text = widget.searchable_text.lower() if hasattr(widget, 'searchable_text') else ""
-            if query in text:
-                widget.focus()
-                widget.scroll_visible()
-                return
+        matches[0].focus()
+        matches[0].scroll_visible()
+
+    def _jump_match(self, delta: int):
+        if not self._last_query:
+            return
+        matches = self._find_matches(self._last_query)
+        if not matches:
+            return
+        self._last_match_index = (self._last_match_index + delta) % len(matches)
+        matches[self._last_match_index].focus()
+        matches[self._last_match_index].scroll_visible()
+
+    def action_next_match(self):
+        self._jump_match(1)
+
+    def action_prev_match(self):
+        self._jump_match(-1)
 
     def action_show_help(self):
         detail = self.query_one(DetailPanel)
