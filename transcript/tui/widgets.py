@@ -221,10 +221,15 @@ class ConversationPanel(VerticalScroll):
             if self._visibility == 2:
                 return
         else:
-            # mode 2: skip assistant text, only show tool calls
+            # mode 2: skip assistant text, only show tool calls (in content order)
             if self._visibility == 2:
-                for tc in msg.tool_calls:
-                    yield ToolCallWidget(tc)
+                if msg.content_order:
+                    for kind, idx in msg.content_order:
+                        if kind == "tool" and idx < len(msg.tool_calls):
+                            yield ToolCallWidget(msg.tool_calls[idx])
+                else:
+                    for tc in msg.tool_calls:
+                        yield ToolCallWidget(tc)
                 return
 
             header = f"[bold cyan]## Assistant \u00b7 {ts_str}[/bold cyan]"
