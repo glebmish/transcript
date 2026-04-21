@@ -130,7 +130,15 @@ class TranscriptApp(App):
         self._visibility_index = (self._visibility_index + 1) % 3
         label = self._VISIBILITY_LABELS[self._visibility_index]
         self.query_one(ConversationPanel).set_visibility(self._visibility_index)
-        self.bind("h", "cycle_visibility", description=f"Show: {label}")
+        # Replace the 'h' Binding in the active bindings map so the Footer
+        # re-renders with the new description on refresh_bindings().
+        new_binding = Binding("h", "cycle_visibility", f"Show: {label}")
+        for bindings_map in (self._bindings, self.screen._bindings):
+            if "h" in bindings_map.key_to_bindings:
+                bindings_map.key_to_bindings["h"] = [
+                    new_binding if b.action == "cycle_visibility" else b
+                    for b in bindings_map.key_to_bindings["h"]
+                ]
         self.refresh_bindings()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
