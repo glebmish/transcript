@@ -34,6 +34,23 @@ def _tool_summary(name: str, input_data: dict) -> str:
         return input_data.get("skill", "?")
     if name in ("TaskCreate", "TaskUpdate"):
         return input_data.get("subject") or input_data.get("taskId") or "?"
+    if name == "AskUserQuestion":
+        questions = input_data.get("questions", "?")
+        if isinstance(questions, list) and questions:
+            return str(questions[0])[:80]
+        return str(questions)[:80]
+    if name == "StructuredOutput":
+        return input_data.get("recap_short") or input_data.get("goal") or input_data.get("prose", "?")[:80]
+    if name == "ToolSearch":
+        return input_data.get("query", "?")
+    if name == "Monitor":
+        return input_data.get("description") or input_data.get("command", "?")[:80]
+    if name == "Workflow":
+        return input_data.get("scriptPath") or input_data.get("script", "?")[:80]
+    if name == "TaskStop":
+        return input_data.get("task_id", "?")
+    if name == "TaskList":
+        return "tasks"
     for v in input_data.values():
         if isinstance(v, str) and v:
             return v[:80]
@@ -141,7 +158,8 @@ def parse(path: str) -> Transcript:
                         text=["Conversation compacted"],
                     ))
                 elif subtype == "local_command":
-                    cmd_name = _extract_command_name(entry.get("content", ""))
+                    raw_content = entry.get("content", "")
+                    cmd_name = _extract_command_name(raw_content)
                     if cmd_name:
                         if current_assistant:
                             _finalize_assistant(current_assistant)
@@ -154,9 +172,17 @@ def parse(path: str) -> Transcript:
                             role=Role.USER,
                             timestamp=_parse_ts(entry.get("timestamp", "")),
                             command_name=cmd_name,
-                            text=[cmd_name],
+                            text=[raw_content or cmd_name],
                         ))
-                elif subtype not in ("api_error", "turn_duration", "bridge_status"):
+                elif subtype not in (
+                    "api_error",
+                    "turn_duration",
+                    "bridge_status",
+                    "stop_hook_summary",
+                    "away_summary",
+                    "informational",
+                    "scheduled_task_fire",
+                ):
                     print(f"Warning: unknown system subtype '{subtype}' at line {line_num}", file=sys.stderr)
                 continue
 
@@ -216,9 +242,17 @@ def parse(path: str) -> Transcript:
                 if isinstance(content, str):
                     text_content = content
                 elif isinstance(content, list):
-                    text_content = " ".join(
-                        b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
-                    )
+                    text_parts = []
+                    for b in content:
+                        if not isinstance(b, dict):
+                            continue
+                        if b.get("type") == "text":
+                            text_parts.append(b.get("text", ""))
+                        elif b.get("type") == "image":
+                            source = b.get("source", {})
+                            source_type = source.get("type") if isinstance(source, dict) else None
+                            text_parts.append(f"[image{': ' + source_type if source_type else ''}]")
+                    text_content = " ".join(text_parts)
                 if text_content.strip():
                     cmd_name = _extract_command_name(text_content)
                     stripped = text_content.strip()

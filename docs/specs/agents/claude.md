@@ -22,6 +22,11 @@ This parser supports native Claude Code JSONL logs.
 | `permission-mode` | Skip | no |
 | `last-prompt` | Skip | no |
 | `queue-operation` | Skip | no |
+| `mode` | Skip | no |
+| `file-history-snapshot` | Skip | no |
+| `ai-title` | Skip | no |
+| `agent-setting` | Skip | no |
+| `bridge-session` | Skip | no |
 
 Unknown entry types are skipped silently for forward compatibility.
 
@@ -34,6 +39,10 @@ Unknown entry types are skipped silently for forward compatibility.
 | `api_error` | Skip | Transient retry metadata |
 | `turn_duration` | Skip | Runtime timing metadata |
 | `bridge_status` | Skip | Remote-control status metadata |
+| `stop_hook_summary` | Skip | Hook summary metadata |
+| `away_summary` | Skip | Away-mode summary metadata |
+| `informational` | Skip | Runtime informational metadata |
+| `scheduled_task_fire` | Skip | Scheduled-task runtime metadata |
 | unknown | Skip with warning | Native shape is not yet mapped |
 
 ## User Content Mapping
@@ -49,6 +58,10 @@ If text contains `<command-name>...</command-name>`, the extracted value becomes
 If text starts with `<local-command-caveat>` or `<local-command-stdout>`, `command_name` is set to `"(command output)"`.
 
 Messages with `command_name` are displayed but are not counted as user messages.
+
+For `system` entries with `subtype: "local_command"`, preserve the raw `content` string in `Message.text` and store the extracted command in `Message.command_name`.
+
+User `image` content blocks are represented as text placeholders such as `[image: base64]`. The current common model does not carry binary media or image source payloads.
 
 ## Assistant Content Mapping
 
@@ -96,6 +109,13 @@ Claude uses the same value for `ToolCall.name` and `ToolCall.display_name`.
 | `Agent` | `input.description` or `input.prompt[:80]` |
 | `Skill` | `input.skill` |
 | `TaskCreate`, `TaskUpdate` | `input.subject` or `input.taskId` |
+| `AskUserQuestion` | first item from `input.questions` |
+| `StructuredOutput` | `input.recap_short`, fallback `input.goal` or `input.prose[:80]` |
+| `ToolSearch` | `input.query` |
+| `Monitor` | `input.description`, fallback `input.command[:80]` |
+| `Workflow` | `input.scriptPath`, fallback `input.script[:80]` |
+| `TaskStop` | `input.task_id` |
+| `TaskList` | literal `tasks` |
 | other | first non-empty string value from `input`, truncated to 80 chars |
 
 ## Result Summary
@@ -158,6 +178,11 @@ Tool-use blocks reserve a placeholder until the matching result arrives. Rendere
 | `permission-mode` entries | mode bookkeeping |
 | `last-prompt` entries | prompt recovery bookmarks |
 | `queue-operation` entries | queue bookkeeping |
+| `mode` entries | mode bookkeeping |
+| `file-history-snapshot` entries | file history metadata |
+| `ai-title` entries | generated title metadata |
+| `agent-setting` entries | agent configuration metadata |
+| `bridge-session` entries | remote bridge metadata |
 | subagent JSONL files | separate conversations, not yet modeled as nested transcripts |
 
 ## Edge Cases
@@ -167,4 +192,5 @@ Tool-use blocks reserve a placeholder until the matching result arrives. Rendere
 - Missing usage: token counts default to 0.
 - Multiple `tool_result` blocks in one user entry: process all blocks.
 - Tool results must match by ID.
+- Known metadata system subtypes are skipped silently.
 - Unknown system subtypes: warn and skip.

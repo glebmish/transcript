@@ -64,6 +64,38 @@ def _tool_summary(name: str, args: dict) -> str:
     return "?"
 
 
+def _summarize_text(text: str) -> str:
+    if len(text) <= 50 and "\n" not in text:
+        return text
+    lines = text.strip().split("\n")
+    return f"{len(lines)} lines"
+
+
+def _summary_from_display(display) -> str:
+    """Convert Gemini's string/list/dict resultDisplay into a compact string."""
+    if not display:
+        return ""
+    if isinstance(display, str):
+        return _summarize_text(display)
+    if isinstance(display, list):
+        return f"{len(display)} lines"
+    if isinstance(display, dict):
+        for key in ("summary", "result", "state", "terminateReason"):
+            value = display.get(key)
+            if isinstance(value, str) and value:
+                return _summarize_text(value)
+        files = display.get("files")
+        if isinstance(files, list):
+            return f"{len(files)} files"
+        diff_stat = display.get("diffStat")
+        if isinstance(diff_stat, str) and diff_stat:
+            return diff_stat
+        if display.get("isSubagentProgress"):
+            return "subagent progress"
+        return f"{len(display)} fields"
+    return str(display)[:50]
+
+
 def _extract_result(tc: dict) -> tuple[str, str, Status]:
     """Returns (result_summary, result_full, status)."""
     status = _STATUS_MAP.get(tc.get("status", "success"), Status.PASSED)
@@ -82,17 +114,12 @@ def _extract_result(tc: dict) -> tuple[str, str, Status]:
                 return error_text, error_text, error_status
             result_full = resp.get("output", "")
 
-    if result_display:
-        if len(result_display) <= 50 and "\n" not in result_display:
-            return result_display, result_full, status
-        lines = result_display.strip().split("\n")
-        return f"{len(lines)} lines", result_full, status
+    display_summary = _summary_from_display(result_display)
+    if display_summary:
+        return display_summary, result_full, status
 
     if result_full:
-        if len(result_full) <= 50 and "\n" not in result_full:
-            return result_full, result_full, status
-        lines = result_full.strip().split("\n")
-        return f"{len(lines)} lines", result_full, status
+        return _summarize_text(result_full), result_full, status
 
     return "ok", result_full, status
 

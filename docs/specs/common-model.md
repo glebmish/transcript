@@ -76,6 +76,8 @@ class Transcript:
 
 `Message.text` contains user-visible message text. It preserves raw local-command XML and other session internals when the native log exposes them as message text.
 
+When a native format exposes media without a common media field, parsers may add a short placeholder to `Message.text` so the transcript shows that the media existed.
+
 `Message.thinking` contains native thinking, reasoning, or thought-description blocks when available.
 
 `Message.tool_calls` contains normalized tool calls attached to assistant messages.
@@ -87,6 +89,8 @@ class Transcript:
 `ToolCall.summary` is the short human-readable identifier for the call: file path, command description, search pattern, URL, question, or first meaningful string argument.
 
 `ToolCall.result_summary` is the compact outcome: `ok`, `{n} lines`, `{n} matches`, `HTTP {code}`, `FAILED (exit N)`, a short error, or equivalent native result display.
+
+`ToolCall.result_summary` must always be a string, even if the native result display is structured.
 
 `ToolCall.result_full` is the complete native output used for expansion. It must not be truncated by parsers.
 

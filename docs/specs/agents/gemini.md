@@ -17,6 +17,7 @@ This parser supports native Gemini CLI JSON session logs.
   "projectHash": "sha256-hex",
   "startTime": "ISO-8601",
   "lastUpdated": "ISO-8601",
+  "kind": "chat",
   "messages": []
 }
 ```
@@ -71,7 +72,7 @@ Each native `toolCalls[]` entry maps directly to one `ToolCall`.
 | `name` | `ToolCall.name` |
 | `displayName` | `ToolCall.display_name`, fallback `name` |
 | `args` | source for `ToolCall.summary` |
-| `resultDisplay` | preferred source for `ToolCall.result_summary` |
+| `resultDisplay` | preferred source for `ToolCall.result_summary`; may be string, list, or dict |
 | `result[0].functionResponse.response.output` | `ToolCall.result_full` |
 | `result[0].functionResponse.response.error` | error summary and failed/cancelled handling |
 | `status` | `ToolCall.status` |
@@ -110,7 +111,13 @@ Display names can vary between sessions. Prefer native `displayName` when presen
 
 ## Result Summary
 
-Use `resultDisplay` when present.
+Use `resultDisplay` when present. It is not always a string:
+
+- string display: summarize the string directly
+- list display: treat as line-oriented display and summarize as `{n} lines`
+- dict display: prefer string fields such as `summary`, `result`, `state`, or `terminateReason`; otherwise summarize known structured fields such as `files` or `diffStat`
+
+The normalized `ToolCall.result_summary` must always be a string.
 
 Fallbacks:
 
@@ -132,6 +139,8 @@ Gemini reports cumulative `tokens.input`, so parser stores per-message delta.
 | `tokens.thoughts` | `tokens_thinking` |
 
 The first assistant message uses raw `tokens.input` as its delta.
+
+Gemini also reports `tokens.tool` and `tokens.total` in observed logs. These are currently ignored because the common model does not have separate tool-token or total-token fields; `tokens_in`, `tokens_out`, `tokens_cached`, and `tokens_thinking` remain the supported cost/display fields.
 
 ## Status Mapping
 

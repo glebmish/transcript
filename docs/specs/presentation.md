@@ -27,6 +27,8 @@ User messages show timestamp and text.
 
 Text should be preserved as parsed. The tool is for full visibility into session internals, so renderers should not sanitize, summarize, or omit user text unless an explicit view option asks for less content.
 
+When a parser cannot represent native media directly in the common model, it should emit a visible placeholder such as `[image: base64]` in message text rather than silently dropping the block.
+
 ## Assistant Messages
 
 Assistant messages show timestamp, optional model/cost/token details, and the assistant content pieces in original order.

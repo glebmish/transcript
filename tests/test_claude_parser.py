@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 from transcript.parsers.claude import parse
 from transcript.model import Status, Role
 
@@ -139,3 +140,43 @@ def test_unresolved_tool_use_then_new_assistant_turn():
         assert msg_b.tool_calls == []
     finally:
         os.unlink(path)
+
+
+def test_local_command_system_preserves_raw_content(tmp_path):
+    p = tmp_path / "local_command.jsonl"
+    raw = "<command-name>/model</command-name><local-command-stdout>ok</local-command-stdout>"
+    p.write_text(json.dumps({
+        "type": "system",
+        "subtype": "local_command",
+        "timestamp": "2026-01-01T10:00:00Z",
+        "content": raw,
+    }))
+
+    t = parse(str(p))
+    assert len(t.messages) == 1
+    assert t.messages[0].command_name == "/model"
+    assert t.messages[0].text == [raw]
+
+
+def test_user_image_block_is_visible_placeholder(tmp_path):
+    p = tmp_path / "image.jsonl"
+    p.write_text(
+        '{"type":"user","timestamp":"2026-01-01T10:00:00Z",'
+        '"message":{"role":"user","content":[{"type":"text","text":"see this"},'
+        '{"type":"image","source":{"type":"base64","media_type":"image/png","data":"redacted"}}]}}'
+    )
+
+    t = parse(str(p))
+    assert t.messages[0].text == ["see this [image: base64]"]
+
+
+def test_known_hook_system_subtypes_do_not_warn(tmp_path, capsys):
+    p = tmp_path / "known_system.jsonl"
+    p.write_text(
+        '{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-01-01T10:00:00Z"}\n'
+        '{"type":"system","subtype":"away_summary","timestamp":"2026-01-01T10:00:01Z"}'
+    )
+
+    parse(str(p))
+    captured = capsys.readouterr()
+    assert "unknown system subtype" not in captured.err

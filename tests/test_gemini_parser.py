@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 from transcript.parsers.gemini import parse
 from transcript.model import Status, Role
 
@@ -87,3 +88,70 @@ def test_info_messages_skipped():
     t = parse(FIXTURE)
     for m in t.messages:
         assert "Request cancelled" not in " ".join(m.text)
+
+
+def test_structured_result_display_list(tmp_path):
+    p = tmp_path / "gemini_structured_display.json"
+    p.write_text(json.dumps({
+        "sessionId": "structured-display",
+        "startTime": "2026-01-01T10:00:00Z",
+        "lastUpdated": "2026-01-01T10:00:01Z",
+        "messages": [{
+            "type": "gemini",
+            "timestamp": "2026-01-01T10:00:01Z",
+            "model": "gemini-2.5-flash",
+            "content": "",
+            "tokens": {"input": 10, "output": 2, "cached": 0, "thoughts": 0},
+            "toolCalls": [{
+                "name": "run_shell_command",
+                "displayName": "Shell",
+                "args": {"command": "printf hi"},
+                "resultDisplay": [["line 1"], ["line 2"], ["line 3"]],
+                "result": [{
+                    "functionResponse": {
+                        "response": {"output": "line 1\nline 2\nline 3"}
+                    }
+                }],
+                "status": "success",
+            }],
+        }],
+    }))
+
+    t = parse(str(p))
+    tc = t.messages[0].tool_calls[0]
+    assert tc.result_summary == "3 lines"
+    assert tc.result_full == "line 1\nline 2\nline 3"
+    assert isinstance(tc.result_summary, str)
+
+
+def test_structured_result_display_dict(tmp_path):
+    p = tmp_path / "gemini_structured_dict.json"
+    p.write_text(json.dumps({
+        "sessionId": "structured-dict",
+        "startTime": "2026-01-01T10:00:00Z",
+        "lastUpdated": "2026-01-01T10:00:01Z",
+        "messages": [{
+            "type": "gemini",
+            "timestamp": "2026-01-01T10:00:01Z",
+            "model": "gemini-2.5-flash",
+            "content": "",
+            "tokens": {"input": 10, "output": 2, "cached": 0, "thoughts": 0, "tool": 5, "total": 17},
+            "toolCalls": [{
+                "name": "generalist",
+                "displayName": "Generalist Agent",
+                "args": {"request": "inspect fixtures"},
+                "resultDisplay": {"summary": "done"},
+                "result": [{
+                    "functionResponse": {
+                        "response": {"output": "full result"}
+                    }
+                }],
+                "status": "success",
+            }],
+        }],
+    }))
+
+    t = parse(str(p))
+    tc = t.messages[0].tool_calls[0]
+    assert tc.result_summary == "done"
+    assert tc.result_full == "full result"
