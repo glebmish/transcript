@@ -15,7 +15,7 @@ Every transcript begins with summary metadata:
 - token totals
 - estimated cost
 
-Message counts include real user messages and assistant messages. Compaction markers and `command_name` messages are displayed but not counted as user messages.
+Message counts include real user messages and assistant messages. Compaction markers, `command_name` messages, system messages, and developer messages are displayed but not counted as user messages.
 
 Tool totals count passed, failed, and cancelled tool calls.
 
@@ -38,6 +38,10 @@ When `content_order` is populated, renderers must use it to preserve interleavin
 1. thinking
 2. text
 3. tool calls
+
+## Instruction Messages
+
+System and developer messages show timestamp and text. They preserve visible instruction or runtime-internal content from native logs, but they are not counted as user or assistant messages.
 
 ## Thinking
 

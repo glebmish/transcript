@@ -2,6 +2,7 @@ import sys
 import argparse
 from transcript.detect import detect_format
 from transcript.parsers.claude import parse as parse_claude
+from transcript.parsers.codex import parse as parse_codex
 from transcript.parsers.gemini import parse as parse_gemini
 from transcript.renderers.markdown import render, RenderOptions
 
@@ -12,7 +13,7 @@ def main():
     )
     parser.add_argument("input", nargs="?", help="Path to log file")
     parser.add_argument(
-        "-f", "--format", choices=["claude", "gemini"],
+        "-f", "--format", choices=["claude", "gemini", "codex"],
         help="Log format (auto-detected if omitted)"
     )
     parser.add_argument("-o", "--output", help="Output file (default: stdout)")
@@ -54,6 +55,8 @@ def main():
     try:
         if fmt == "claude":
             transcript = parse_claude(args.input)
+        elif fmt == "codex":
+            transcript = parse_codex(args.input)
         else:
             transcript = parse_gemini(args.input)
     except Exception as e:

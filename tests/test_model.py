@@ -11,6 +11,8 @@ def test_status_values():
 def test_role_values():
     assert Role.USER.value == "user"
     assert Role.ASSISTANT.value == "assistant"
+    assert Role.SYSTEM.value == "system"
+    assert Role.DEVELOPER.value == "developer"
 
 
 def test_tool_call_creation():

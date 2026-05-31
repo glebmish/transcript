@@ -1,6 +1,6 @@
 # transcript
 
-Convert Claude Code and Gemini CLI conversation logs into readable Markdown transcripts, or browse them interactively in a terminal UI.
+Convert Claude Code, Gemini CLI, and Codex conversation logs into readable Markdown transcripts, or browse them interactively in a terminal UI.
 
 ## Install
 
@@ -15,7 +15,7 @@ ln -sf "$(pwd)/.venv/bin/transcript" ~/.local/bin/transcript
 ### CLI — Markdown output
 
 ```bash
-# Auto-detects format (Claude JSONL or Gemini JSON)
+# Auto-detects format (Claude JSONL, Gemini JSON, or Codex JSONL)
 transcript session.jsonl
 
 # Write to file
@@ -35,6 +35,7 @@ transcript --no-cost session.jsonl
 
 # Force format
 transcript --format claude session.jsonl
+transcript --format codex session.jsonl
 ```
 
 ### TUI — Interactive viewer
@@ -88,8 +89,9 @@ transcript view session.jsonl
 |-------|------|--------|
 | Claude Code | `~/.claude/projects/<hash>/<session>.jsonl` | JSONL |
 | Gemini CLI | `~/.gemini/tmp/<hash>/chats/session-*.json` | JSON |
+| Codex CLI/Desktop | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | JSONL |
 
-Format is auto-detected. Use `--format claude` or `--format gemini` to override.
+Format is auto-detected. Use `--format claude`, `--format gemini`, or `--format codex` to override.
 
 ## Output example
 

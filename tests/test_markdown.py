@@ -37,6 +37,18 @@ def test_render_summary_header():
     assert "2 (1 user, 1 assistant)" in md
 
 
+def test_render_instruction_roles_visible_but_not_counted():
+    t = _make_transcript([
+        Message(role=Role.DEVELOPER, timestamp=TS1, text=["Follow project conventions"]),
+        Message(role=Role.USER, timestamp=TS1, text=["hello"]),
+        Message(role=Role.ASSISTANT, timestamp=TS2, model="claude-opus-4-6", text=["hi"]),
+    ])
+    md = render(t)
+    assert "## Developer" in md
+    assert "Follow project conventions" in md
+    assert "2 (1 user, 1 assistant)" in md
+
+
 def test_render_no_thinking():
     t = _make_transcript([
         Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",

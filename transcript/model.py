@@ -12,6 +12,8 @@ class Status(Enum):
 class Role(Enum):
     USER = "user"
     ASSISTANT = "assistant"
+    SYSTEM = "system"
+    DEVELOPER = "developer"
 
 
 @dataclass

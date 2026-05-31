@@ -228,6 +228,20 @@ class ConversationPanel(VerticalScroll):
         )
         return Static(header)
 
+    def _role_header(self, msg: Message, ts_str: str) -> str:
+        if msg.role == Role.USER:
+            return f"[bold green]## User \u00b7 {ts_str}[/bold green]"
+        if msg.role == Role.ASSISTANT:
+            header = f"[bold cyan]## Assistant \u00b7 {ts_str}[/bold cyan]"
+            if msg.tokens_in or msg.tokens_out:
+                header += f" [dim]\u00b7 \u2191{msg.tokens_in:,} \u2193{msg.tokens_out:,}[/dim]"
+            return header
+        if msg.role == Role.SYSTEM:
+            return f"[bold yellow]## System \u00b7 {ts_str}[/bold yellow]"
+        if msg.role == Role.DEVELOPER:
+            return f"[bold magenta]## Developer \u00b7 {ts_str}[/bold magenta]"
+        return f"[bold]## {msg.role.value.title()} \u00b7 {ts_str}[/bold]"
+
     def _render_message(self, msg: Message):
         ts_str = msg.timestamp.strftime("%H:%M:%S")
 
@@ -239,8 +253,10 @@ class ConversationPanel(VerticalScroll):
                 yield MessageTextWidget(dedented, style="magenta")
             return
 
-        if msg.role == Role.USER:
-            yield MessageHeaderWidget(f"[bold green]## User \u00b7 {ts_str}[/bold green]")
+        if msg.role != Role.ASSISTANT:
+            if self._visibility == 2 and msg.role != Role.USER:
+                return
+            yield MessageHeaderWidget(self._role_header(msg, ts_str))
             for t in msg.text:
                 yield MessageTextWidget(t)
             if self._visibility == 2:
@@ -257,10 +273,7 @@ class ConversationPanel(VerticalScroll):
                         yield ToolCallWidget(tc)
                 return
 
-            header = f"[bold cyan]## Assistant \u00b7 {ts_str}[/bold cyan]"
-            if msg.tokens_in or msg.tokens_out:
-                header += f" [dim]\u00b7 \u2191{msg.tokens_in:,} \u2193{msg.tokens_out:,}[/dim]"
-            yield MessageHeaderWidget(header)
+            yield MessageHeaderWidget(self._role_header(msg, ts_str))
 
             # mode 1: messages only — skip thinking and tools
             if self._visibility == 1:

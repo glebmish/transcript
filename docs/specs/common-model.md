@@ -15,6 +15,8 @@ class Status(Enum):
 class Role(Enum):
     USER = "user"
     ASSISTANT = "assistant"
+    SYSTEM = "system"
+    DEVELOPER = "developer"
 
 @dataclass
 class ToolCall:
@@ -66,7 +68,7 @@ class Transcript:
 
 `Transcript.messages` contains all visible conversation pieces in chronological order, including pseudo-messages such as compaction markers and local commands.
 
-`Transcript.source_format` is the native parser key, currently `claude` or `gemini`.
+`Transcript.source_format` is the native parser key, currently `claude`, `gemini`, or `codex`.
 
 `Transcript.session_id` is populated when the native format exposes a stable session identifier. Claude Code JSONL currently does not populate it.
 
@@ -75,6 +77,8 @@ class Transcript:
 `Transcript.models` contains the set of assistant model names found in parsed messages.
 
 `Message.text` contains user-visible message text. It preserves raw local-command XML and other session internals when the native log exposes them as message text.
+
+`Role.SYSTEM` and `Role.DEVELOPER` preserve instruction and runtime-internal messages that are visible in native logs. They are displayed as transcript messages but are not counted as user or assistant conversation turns.
 
 When a native format exposes media without a common media field, parsers may add a short placeholder to `Message.text` so the transcript shows that the media existed.
 
@@ -132,5 +136,6 @@ Format detection is a convenience layer. It must not contain parser-specific nor
 
 - Gemini CLI: single JSON object with `sessionId` and `messages`.
 - Claude Code: JSONL with at least one valid entry whose `type` is a known Claude Code entry type.
+- Codex CLI/Desktop: JSONL with `session_meta` entries or `response_item` entries whose payload has a Codex response item `type`.
 
-`--format claude|gemini` overrides detection.
+`--format claude|gemini|codex` overrides detection.

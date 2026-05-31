@@ -42,6 +42,18 @@ def _fmt_ts(ts: datetime) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _role_label(role: Role) -> str:
+    if role == Role.USER:
+        return "User"
+    if role == Role.ASSISTANT:
+        return "Assistant"
+    if role == Role.SYSTEM:
+        return "System"
+    if role == Role.DEVELOPER:
+        return "Developer"
+    return role.value.title()
+
+
 def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
     opts = options or RenderOptions()
     msgs = transcript.messages
@@ -89,9 +101,7 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
         lines.append("---")
         lines.append("")
 
-        if m.role == Role.USER:
-            lines.append(f"## User \u00b7 {_fmt_ts(m.timestamp)}")
-        else:
+        if m.role == Role.ASSISTANT:
             header = f"## Assistant \u00b7 {_fmt_ts(m.timestamp)}"
             if opts.show_cost:
                 msg_cost = estimate_cost(m.model or "", m.tokens_in, m.tokens_out, m.tokens_cached)
@@ -100,6 +110,8 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
                     f" \u00b7 {_fmt_cost(msg_cost)}"
                 )
             lines.append(header)
+        else:
+            lines.append(f"## {_role_label(m.role)} \u00b7 {_fmt_ts(m.timestamp)}")
 
         lines.append("")
 

@@ -5,6 +5,7 @@ VENV_PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
 CLI = [VENV_PYTHON, "-m", "transcript"]
 CLAUDE_FIXTURE = str(Path(__file__).parent / "fixtures" / "claude_minimal.jsonl")
 GEMINI_FIXTURE = str(Path(__file__).parent / "fixtures" / "gemini_minimal.json")
+CODEX_FIXTURE = str(Path(__file__).parent / "fixtures" / "codex_minimal.jsonl")
 
 
 def _run(*args):
@@ -27,10 +28,24 @@ def test_gemini_auto_detect():
     assert "gemini-2.5-flash" in r.stdout
 
 
+def test_codex_auto_detect():
+    r = _run(CODEX_FIXTURE)
+    assert r.returncode == 0
+    assert "# Transcript" in r.stdout
+    assert "## Developer" in r.stdout
+    assert "gpt-5.5" in r.stdout
+
+
 def test_format_override():
     r = _run("--format", "claude", CLAUDE_FIXTURE)
     assert r.returncode == 0
     assert "# Transcript" in r.stdout
+
+
+def test_codex_format_override():
+    r = _run("--format", "codex", CODEX_FIXTURE)
+    assert r.returncode == 0
+    assert "exec_command" in r.stdout
 
 
 def test_no_thinking():
