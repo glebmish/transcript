@@ -34,19 +34,34 @@ class GutterRow(Horizontal):
     }
     """
 
-    def __init__(self, gutter_text: str, content: str, **kwargs):
+    def __init__(
+        self,
+        gutter_text: str,
+        content,
+        *,
+        markup: bool = False,
+        searchable_text: str | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._gutter_text = gutter_text
-        self._raw_content = content
+        self._content = content
+        self._markup = markup
+        self._searchable_text = searchable_text if searchable_text is not None else str(content)
         self.can_focus = True
 
     def compose(self):
-        yield Static(self._gutter_text, classes="gutter", id=f"g-{id(self)}")
-        yield Static(self._raw_content, classes="content", id=f"c-{id(self)}")
+        yield Static(self._gutter_text, classes="gutter", id=f"g-{id(self)}", markup=True)
+        yield Static(
+            self._content,
+            classes="content",
+            id=f"c-{id(self)}",
+            markup=self._markup,
+        )
 
     @property
     def searchable_text(self) -> str:
-        return self._raw_content
+        return self._searchable_text
 
     def _gutter_widget(self):
         return self.query_one(f"#g-{id(self)}", Static)
@@ -65,15 +80,16 @@ class MessageHeaderWidget(GutterRow):
     """A message header (User/Assistant) that can receive focus."""
 
     def __init__(self, content: str, **kwargs):
-        super().__init__("  ", content, **kwargs)
+        super().__init__("  ", content, markup=True, **kwargs)
         self.styles.margin = (1, 0, 0, 0)
 
 
 class MessageTextWidget(GutterRow):
     """A message text block that can receive focus."""
 
-    def __init__(self, content: str, **kwargs):
-        super().__init__("  ", content, **kwargs)
+    def __init__(self, content: str, style: str | None = None, **kwargs):
+        renderable = Content.assemble((content, style)) if style else content
+        super().__init__("  ", renderable, searchable_text=content, **kwargs)
 
 
 class ToolCallWidget(GutterRow):
@@ -97,7 +113,7 @@ class ToolCallWidget(GutterRow):
                 summary=tool_call.result_summary,
             ),
         )
-        super().__init__(gutter, label, **kwargs)
+        super().__init__(gutter, label, searchable_text=self.searchable_text, **kwargs)
         if tool_call.status == Status.FAILED:
             self.styles.color = "red"
         elif tool_call.status == Status.CANCELLED:
@@ -125,15 +141,24 @@ class ThinkingWidget(GutterRow):
         self._collapsed = True
         lines = text.strip().split("\n")
         self._line_count = len(lines)
-        super().__init__(self._GREY_BAR, self._collapsed_text(), **kwargs)
+        super().__init__(
+            self._GREY_BAR,
+            self._collapsed_text(),
+            searchable_text=text,
+            **kwargs,
+        )
 
     def _collapsed_text(self):
-        return f"[dim italic]Thinking ({self._line_count} lines)  \\[>][/dim italic]"
+        return Content.assemble((f"Thinking ({self._line_count} lines)  [>]", "dim italic"))
 
     def _expanded_text(self):
         lines = self._full_text.strip().split("\n")
-        rendered = "\n".join(f"[dim italic]{line}[/dim italic]" for line in lines)
-        return f"[dim italic]Thinking[/dim italic]\n{rendered}"
+        parts = [("Thinking", "dim italic"), "\n"]
+        for idx, line in enumerate(lines):
+            if idx:
+                parts.append("\n")
+            parts.append((line, "dim italic"))
+        return Content.assemble(*parts)
 
     def _content_widget(self):
         return self.query_one(f"#c-{id(self)}", Static)
@@ -211,7 +236,7 @@ class ConversationPanel(VerticalScroll):
             yield MessageHeaderWidget(f"[bold green]## User ({cmd_label}) \u00b7 {ts_str}[/bold green]")
             for t in msg.text:
                 dedented = "\n".join(line.strip() for line in t.splitlines())
-                yield MessageTextWidget(f"[magenta]{dedented}[/magenta]")
+                yield MessageTextWidget(dedented, style="magenta")
             return
 
         if msg.role == Role.USER:
@@ -291,8 +316,8 @@ class DetailPanel(VerticalScroll):
 
     def show_tool_call(self, tc: ToolCall):
         self.remove_children()
-        self.mount(Static(f"[bold]{tc.display_name}: {tc.summary}[/bold]"))
-        self.mount(Static(tc.result_summary))
+        self.mount(Static(Content.assemble((f"{tc.display_name}: {tc.summary}", "bold"))))
+        self.mount(Static(tc.result_summary, markup=False))
         if tc.result_full:
             ext = Path(tc.summary).suffix if "/" in tc.summary else ""
             if ext in (".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java", ".rb",
@@ -308,12 +333,12 @@ class DetailPanel(VerticalScroll):
                     return
                 except Exception:
                     pass
-            self.mount(Static(tc.result_full))
+            self.mount(Static(tc.result_full, markup=False))
 
     def show_thinking(self, text: str):
         self.remove_children()
         self.mount(Static("[bold]Thinking[/bold]"))
-        self.mount(Static(f"[dim italic]{text}[/dim italic]"))
+        self.mount(Static(Content.assemble((text, "dim italic"))))
 
     def clear_detail(self):
         self.remove_children()
