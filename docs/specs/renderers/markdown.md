@@ -1,0 +1,117 @@
+# Markdown Renderer
+
+The Markdown renderer converts the common model into a readable static transcript.
+
+It must follow `docs/specs/presentation.md` for meaning and visibility rules.
+
+## Entry Point
+
+```python
+render(transcript: Transcript, options: RenderOptions | None = None) -> str
+```
+
+## Options
+
+| Option | Default | Effect |
+|---|---|---|
+| `show_thinking` | true | Include thinking blocks |
+| `show_tools` | true | Include tool calls |
+| `show_text` | true | Include message text |
+| `show_cost` | true | Include token and cost metadata |
+| `expand_tools` | false | Include full tool output |
+
+## Layout
+
+The document starts with:
+
+```markdown
+# Transcript
+
+- **Duration**: ...
+- **Model(s)**: ...
+- **Messages**: ...
+- **Tool calls**: ...
+- **Tokens**: ...
+```
+
+Tool-call and token lines are hidden when `show_cost` is false.
+
+Messages are separated by horizontal rules.
+
+User messages render as:
+
+```markdown
+## User · YYYY-MM-DD HH:MM:SS
+
+message text
+```
+
+Assistant messages render as:
+
+```markdown
+## Assistant · YYYY-MM-DD HH:MM:SS · ↑in ↓out · $cost
+```
+
+Token and cost suffixes are hidden when `show_cost` is false.
+
+## Content Ordering
+
+For assistant messages, use `Message.content_order` when non-empty. This preserves native interleaving:
+
+```markdown
+assistant text
+
+`Read: /file.py -> 10 lines`
+
+more assistant text
+```
+
+When `content_order` is empty, render thinking, then text, then tool calls.
+
+## Thinking
+
+Thinking blocks render as Markdown blockquotes:
+
+```markdown
+> thinking line
+> next line
+```
+
+They are omitted when `show_thinking` is false.
+
+## Tool Calls
+
+Collapsed tool calls render compactly:
+
+```markdown
+`Read: /src/auth.py -> 84 lines`
+```
+
+When `content_order` is unavailable and tools are rendered as a batch, they may appear in a fenced block:
+
+```markdown
+Read: /src/auth.py -> 84 lines
+Bash: pytest tests/ -> FAILED (exit 1)
+```
+
+Expanded tool calls render the compact line followed by full output:
+
+````markdown
+Bash: pytest tests/ -> FAILED (exit 1)
+
+```
+full output
+```
+````
+
+With `expand_tools`, output must not be truncated.
+
+## Special Messages
+
+Compaction markers render as:
+
+```markdown
+--- conversation compacted ---
+```
+
+Local commands render as timestamped italic command entries and are not counted as user messages.

@@ -1,0 +1,132 @@
+# Common Model
+
+All parsers normalize native agent logs into one common model. Renderers and the TUI consume only this model.
+
+This boundary is what keeps presentation standard across agents: new agent support should first prove how its native log pieces map into these types.
+
+## Types
+
+```python
+class Status(Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class Role(Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
+@dataclass
+class ToolCall:
+    name: str
+    display_name: str
+    summary: str
+    result_summary: str
+    result_full: str
+    status: Status
+
+@dataclass
+class Message:
+    role: Role
+    timestamp: datetime
+    model: str | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+    tokens_cached: int = 0
+    tokens_thinking: int = 0
+    thinking: list[str] = field(default_factory=list)
+    text: list[str] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    is_compaction_marker: bool = False
+    command_name: str | None = None
+    content_order: list[tuple[str, int]] = field(default_factory=list)
+
+@dataclass
+class ToolStats:
+    passed: int
+    failed: int
+    cancelled: int
+
+@dataclass
+class Transcript:
+    messages: list[Message]
+    source_format: str
+    session_id: str | None
+    start_time: datetime
+    end_time: datetime
+    models: set[str]
+    total_tokens_in: int
+    total_tokens_out: int
+    total_cost: float | None
+    cost_is_partial: bool
+    tool_stats: ToolStats
+```
+
+## Field Contracts
+
+`Transcript.messages` contains all visible conversation pieces in chronological order, including pseudo-messages such as compaction markers and local commands.
+
+`Transcript.source_format` is the native parser key, currently `claude` or `gemini`.
+
+`Transcript.session_id` is populated when the native format exposes a stable session identifier. Claude Code JSONL currently does not populate it.
+
+`Transcript.start_time` and `Transcript.end_time` are normalized `datetime` values. Missing timestamps use `datetime.min` with UTC timezone.
+
+`Transcript.models` contains the set of assistant model names found in parsed messages.
+
+`Message.text` contains user-visible message text. It preserves raw local-command XML and other session internals when the native log exposes them as message text.
+
+`Message.thinking` contains native thinking, reasoning, or thought-description blocks when available.
+
+`Message.tool_calls` contains normalized tool calls attached to assistant messages.
+
+`Message.command_name` marks local slash commands or command-output pseudo-messages. These messages are displayed, but are not counted as user messages.
+
+`Message.content_order` preserves interleaving of assistant thinking, text, and tool calls. Renderers must iterate it when non-empty and fall back to thinking, then text, then tools when empty.
+
+`ToolCall.summary` is the short human-readable identifier for the call: file path, command description, search pattern, URL, question, or first meaningful string argument.
+
+`ToolCall.result_summary` is the compact outcome: `ok`, `{n} lines`, `{n} matches`, `HTTP {code}`, `FAILED (exit N)`, a short error, or equivalent native result display.
+
+`ToolCall.result_full` is the complete native output used for expansion. It must not be truncated by parsers.
+
+## Parser Contract
+
+Each parser exposes:
+
+```python
+def parse(path: str) -> Transcript
+```
+
+Each parser is responsible for:
+
+- reading the native log file
+- converting native entries into `Message` and `ToolCall` objects
+- preserving full visible text and tool output
+- computing transcript totals, model set, tool stats, and cost
+- handling malformed entries gracefully when possible
+- warning to stderr for malformed entries that can be skipped
+
+Parsers should skip native internals only when the relevant agent mapping spec says they are intentionally out of presentation scope.
+
+## Cost Contract
+
+Pricing is stored in `transcript/pricing.py` as input and output USD prices per 1M tokens, keyed by model-name prefix.
+
+Cached input tokens are treated as free. Cost is:
+
+```text
+billable_input = max(0, tokens_in - tokens_cached)
+cost = billable_input / 1_000_000 * input_price + tokens_out / 1_000_000 * output_price
+```
+
+If a model is unknown, cost for that message is unknown. Transcript cost sums known message costs and sets `cost_is_partial=True` when any message had unknown cost. If all message costs are unknown, `total_cost` is `None`.
+
+## Detection Contract
+
+Format detection is a convenience layer. It must not contain parser-specific normalization logic.
+
+- Gemini CLI: single JSON object with `sessionId` and `messages`.
+- Claude Code: JSONL with at least one valid entry whose `type` is a known Claude Code entry type.
+
+`--format claude|gemini` overrides detection.

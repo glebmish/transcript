@@ -10,7 +10,7 @@
 
 **Run commands:** Always use `.venv/bin/python` and `.venv/bin/pytest`.
 
-**Specs:** All specs live in `docs/specs/` — `convert.md` (model), `claude.md` (Claude parser), `gemini.md` (Gemini parser), `cli-design.md` (CLI), `tui-design.md` (TUI), `tools.md` (tool display).
+**Specs:** All specs live in `docs/specs/`. Current canonical specs are `common-model.md`, `presentation.md`, `agents/claude.md`, `agents/gemini.md`, `renderers/markdown.md`, and `renderers/tui.md`.
 
 ---
 
@@ -555,7 +555,7 @@ Run: `.venv/bin/pytest tests/test_claude_parser.py -v`
 
 - [ ] **Step 3: Implement Claude parser**
 
-See `docs/specs/claude.md` for full spec. Key implementation points:
+See `docs/specs/agents/claude.md` for full spec. Key implementation points:
 
 - Read JSONL line by line, skip non-user/non-assistant/non-system types
 - Store tool_use blocks in a dict keyed by `id`
@@ -955,7 +955,7 @@ Run: `.venv/bin/pytest tests/test_gemini_parser.py -v`
 
 - [ ] **Step 3: Implement Gemini parser**
 
-See `docs/specs/gemini.md` for full spec. Key implementation points:
+See `docs/specs/agents/gemini.md` for full spec. Key implementation points:
 
 - Read JSON file, iterate `messages[]`
 - Skip `info` type entries
