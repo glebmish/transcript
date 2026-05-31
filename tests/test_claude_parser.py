@@ -108,3 +108,34 @@ def test_deduplication():
         assert assistant_msgs[0].text == ["hello", "world"]  # both accumulated
     finally:
         os.unlink(path)
+
+
+def test_unresolved_tool_use_then_new_assistant_turn():
+    """Tool_use with no matching tool_result must be flushed onto its owning
+    assistant before the next assistant turn starts. Otherwise the reserved
+    content_order slot leaks into the next assistant (which has a shorter
+    content_order) and triggers IndexError at end-of-file flush.
+    """
+    import tempfile, os
+    lines = [
+        '{"type":"user","timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+        # Assistant A emits text + tool_use; no tool_result ever arrives.
+        '{"type":"assistant","timestamp":"2026-01-01T10:00:01Z","message":{"id":"msg_A","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"let me check"},{"type":"tool_use","id":"tu_orphan","name":"Read","input":{"file_path":"/x"}}],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0}}}',
+        # Assistant B starts with a different msg_id and shorter content.
+        '{"type":"assistant","timestamp":"2026-01-01T10:00:02Z","message":{"id":"msg_B","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":12,"output_tokens":3,"cache_read_input_tokens":0}}}',
+    ]
+    fd, path = tempfile.mkstemp(suffix=".jsonl")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines))
+        t = parse(path)
+        assistant_msgs = [m for m in t.messages if m.role == Role.ASSISTANT]
+        assert len(assistant_msgs) == 2
+        msg_a, msg_b = assistant_msgs
+        assert len(msg_a.tool_calls) == 1
+        assert msg_a.tool_calls[0].name == "Read"
+        assert msg_a.tool_calls[0].status == Status.FAILED
+        assert msg_a.tool_calls[0].result_summary == "no result"
+        assert msg_b.tool_calls == []
+    finally:
+        os.unlink(path)
