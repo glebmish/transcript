@@ -140,8 +140,14 @@ Format detection is a convenience layer. It must not contain parser-specific nor
 
 Detection must not crash on hostile input: undecodable JSON, including JSON nested deeply enough to raise `RecursionError`, is treated as "not this format".
 
-- Gemini CLI: single JSON object with `sessionId` and `messages`.
-- Claude Code: JSONL with at least one valid entry whose `type` is a known Claude Code entry type.
-- Codex CLI/Desktop: JSONL with `session_meta` entries or `response_item` entries whose payload has a Codex response item `type`.
+Detection runs in this order (`transcript/detect.py`):
+
+1. Gemini CLI: the whole file parses as a single JSON object with `sessionId` and `messages`.
+2. Otherwise the file is scanned as JSONL, line by line in order. Blank, malformed, and non-object lines are skipped. The first recognizable line decides the format:
+   - Codex CLI/Desktop: `type` is `session_meta` with a non-empty `payload.id`, `response_item` with a non-empty `payload.type`, or `turn_context` / `event_msg` with an object `payload`.
+   - Claude Code: `type` is one of `user`, `assistant`, `system`, `progress`, `attachment`.
+
+   Codex types are checked before Claude types on each line. The two type sets do not overlap.
+3. If no line is recognizable, detection fails with an error.
 
 `--format claude|gemini|codex` overrides detection.

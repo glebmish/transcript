@@ -7,7 +7,7 @@ This parser supports native Claude Code JSONL logs.
 - Parser key: `claude`
 - Typical location: `~/.claude/projects/<project-hash>/<session-id>.jsonl`
 - File shape: JSONL, one JSON object per line
-- Detection signal: at least one valid JSONL entry with a known Claude Code `type`
+- Detection signal: the first recognizable JSONL line has a Claude Code `type` (`user`, `assistant`, `system`, `progress`, `attachment`). See "Detection Contract" in `docs/specs/common-model.md`.
 
 ## Session Identity
 

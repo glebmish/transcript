@@ -10,6 +10,9 @@ from transcript.parsers.common import as_dict, as_int, as_str, is_real_model
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 _EXIT_RE = re.compile(r"(?:Process exited with code|Exit code:)\s*(-?\d+)")
 _PATCH_FILE_RE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
+# Lowercased prefixes of the first non-empty output line.
+_CANCEL_MARKERS = ("cancelled", "canceled")
+_FAILURE_MARKERS = ("error:", "failed")
 
 
 def _parse_ts(raw: str) -> datetime:
@@ -168,12 +171,14 @@ def _summarize_output(output: str, patch_event: dict | None = None) -> tuple[str
             return "ok", Status.PASSED
         return f"FAILED (exit {code})", Status.FAILED
 
-    lower = output.lower()
-    if "cancelled" in lower or "canceled" in lower:
+    # Only the first non-empty line can mark a cancellation or failure, so
+    # output that merely mentions "cancelled" or "0 failed" keeps PASSED.
+    first = output.strip().splitlines()[0].strip() if output.strip() else ""
+    first_lower = first.lower()
+    if first_lower.startswith(_CANCEL_MARKERS):
         return "cancelled", Status.CANCELLED
-    if "failed" in lower or "error:" in lower:
-        first = output.strip().splitlines()[0] if output.strip() else "FAILED"
-        return f"FAILED: {first[:50]}" if not first.startswith("FAILED") else first[:50], Status.FAILED
+    if first_lower.startswith(_FAILURE_MARKERS):
+        return (first[:50] if first.startswith("FAILED") else f"FAILED: {first[:50]}"), Status.FAILED
     if output.strip() in ("Success", "Success."):
         return "ok", Status.PASSED
 
@@ -390,7 +395,13 @@ def parse(path: str) -> Transcript:
                 call_id = as_str(payload.get("call_id"))
                 pending = pending_tools.pop(call_id, None)
                 if pending is None:
-                    continue
+                    # No call to attach to: keep the output visible anyway.
+                    pending = {
+                        "name": "?",
+                        "args": {},
+                        "raw_input": f"unmatched output for call {call_id or '?'}",
+                        "status": None,
+                    }
                 msg = ensure_assistant(ts)
                 output = payload.get("output")
                 if output is None:
@@ -404,6 +415,8 @@ def parse(path: str) -> Transcript:
                 order_pos = pending_tool_order.pop(call_id, None)
                 if order_pos is not None and order_pos < len(msg.content_order):
                     msg.content_order[order_pos] = ("tool", tool_idx)
+                elif order_pos is None:
+                    msg.content_order.append(("tool", tool_idx))
                 continue
 
             if item_type:

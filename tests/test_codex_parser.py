@@ -164,3 +164,67 @@ def test_non_dict_line_and_wrong_types_do_not_abort(tmp_path, capsys):
     assert isinstance(tc.summary, str)
     assert "ls" in tc.summary
     assert "line 1" in capsys.readouterr().err
+
+
+def _single_tool_output(tmp_path, output, name="read_file", args=None):
+    p = tmp_path / "codex_output.jsonl"
+    _write_jsonl(p, [
+        {"timestamp": "2026-01-01T10:00:00Z", "type": "turn_context", "payload": {"model": "gpt-5.5"}},
+        {"timestamp": "2026-01-01T10:00:01Z", "type": "response_item",
+         "payload": {"type": "function_call", "name": name, "call_id": "c1",
+                     "arguments": json.dumps(args or {"path": "notes.txt"})}},
+        {"timestamp": "2026-01-01T10:00:02Z", "type": "response_item",
+         "payload": {"type": "function_call_output", "call_id": "c1", "output": output}},
+    ])
+    return parse(str(p)).messages[0].tool_calls[0]
+
+
+def test_output_mentioning_cancelled_is_not_cancelled(tmp_path):
+    tc = _single_tool_output(tmp_path, "Meeting notes\nthe job was cancelled last week\nreschedule it")
+    assert tc.status == Status.PASSED
+    assert tc.result_summary == "3 lines"
+
+
+def test_output_mentioning_failed_is_not_failed(tmp_path):
+    tc = _single_tool_output(tmp_path, "collected 10 items\n\n10 passed, 0 failed in 0.12s")
+    assert tc.status == Status.PASSED
+    assert tc.result_summary == "3 lines"
+
+
+def test_output_mentioning_error_colon_later_is_not_failed(tmp_path):
+    tc = _single_tool_output(tmp_path, "def handler():\n    log('error: retrying')\n")
+    assert tc.status == Status.PASSED
+
+
+def test_output_starting_with_error_marker_is_failed(tmp_path):
+    tc = _single_tool_output(tmp_path, "\nError: file not found: notes.txt\nmore detail")
+    assert tc.status == Status.FAILED
+    assert tc.result_summary == "FAILED: Error: file not found: notes.txt"
+
+
+def test_output_starting_with_failed_marker_is_failed(tmp_path):
+    tc = _single_tool_output(tmp_path, "failed to parse function arguments: missing field `cmd`")
+    assert tc.status == Status.FAILED
+    assert tc.result_summary.startswith("FAILED: failed to parse function arguments")
+
+
+def test_output_starting_with_cancelled_marker_is_cancelled(tmp_path):
+    tc = _single_tool_output(tmp_path, "Cancelled by user")
+    assert tc.status == Status.CANCELLED
+    assert tc.result_summary == "cancelled"
+
+
+def test_output_without_matching_call_is_kept(tmp_path, capsys):
+    p = tmp_path / "codex_orphan.jsonl"
+    _write_jsonl(p, [
+        {"timestamp": "2026-01-01T10:00:00Z", "type": "turn_context", "payload": {"model": "gpt-5.5"}},
+        {"timestamp": "2026-01-01T10:00:01Z", "type": "response_item",
+         "payload": {"type": "function_call_output", "call_id": "c_lost", "output": "orphan output"}},
+    ])
+    t = parse(str(p))
+    assert len(t.messages) == 1
+    tc = t.messages[0].tool_calls[0]
+    assert tc.name == "?"
+    assert tc.summary == "unmatched output for call c_lost"
+    assert tc.result_full == "orphan output"
+    assert t.messages[0].content_order == [("tool", 0)]
