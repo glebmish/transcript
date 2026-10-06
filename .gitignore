@@ -1,6 +1,61 @@
+# Python bytecode / caches
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
+*$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Build / packaging output
+build/
 dist/
 *.egg-info/
+*.egg
+*.whl
+
+# Env files / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+credentials*.json
+service-account*.json
+.pypirc
+
+# Logs
+*.log
+
+# Stray agent session logs dropped at the repo root while testing
+# (root-anchored so tests/fixtures/ stays tracked)
+/*.jsonl
+/*.json
+
+# Agent tooling: commit skills/instructions, ignore local state
+.claude/settings.local.json
+.claude/*.local.*
+.claude/worktrees/
+.claude/todos/
+.agents/*.local.*
+
+# IDE / OS junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
