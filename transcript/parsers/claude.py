@@ -72,6 +72,29 @@ def _extract_command_name(content: str) -> str | None:
     return m.group(1) if m else None
 
 
+_COMMAND_PREFIXES = (
+    "<command-name>",
+    "<command-message>",
+    "<local-command-caveat>",
+    "<local-command-stdout>",
+)
+
+
+def _user_command_name(stripped_text: str) -> str | None:
+    """Return command_name for a user text entry Claude Code wrote for a slash command.
+
+    Only text that STARTS with a command tag counts; a normal prompt that merely
+    mentions <command-name> mid-text stays a regular user message.
+    """
+    if not stripped_text.startswith(_COMMAND_PREFIXES):
+        return None
+    if stripped_text.startswith(("<command-name>", "<command-message>")):
+        name = _extract_command_name(stripped_text)
+        if name:
+            return name
+    return "(command output)"
+
+
 def _tool_result_summary(tool_use_result) -> tuple[str, Status]:
     if tool_use_result is None:
         return "ok", Status.PASSED
@@ -271,10 +294,8 @@ def parse(path: str) -> Transcript:
                             text_parts.append(f"[image{': ' + source_type if source_type else ''}]")
                     text_content = " ".join(text_parts)
                 if text_content.strip():
-                    cmd_name = _extract_command_name(text_content)
                     stripped = text_content.strip()
-                    if not cmd_name and (stripped.startswith("<local-command-caveat>") or stripped.startswith("<local-command-stdout>")):
-                        cmd_name = "(command output)"
+                    cmd_name = _user_command_name(stripped)
                     messages.append(Message(
                         role=Role.USER,
                         timestamp=ts,

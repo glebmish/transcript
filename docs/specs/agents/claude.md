@@ -53,9 +53,11 @@ Text content becomes:
 Message(role=Role.USER, timestamp=ts, text=[text])
 ```
 
-If text contains `<command-name>...</command-name>`, the extracted value becomes `Message.command_name`.
+Slash-command detection only applies when the stripped text starts with one of `<command-name>`, `<command-message>`, `<local-command-caveat>`, or `<local-command-stdout>`. A normal prompt that merely mentions one of these tags mid-text is a regular user message with its full text.
 
-If text starts with `<local-command-caveat>` or `<local-command-stdout>`, `command_name` is set to `"(command output)"`.
+If the text starts with `<command-name>` or `<command-message>`, the value of the first `<command-name>...</command-name>` becomes `Message.command_name`.
+
+If the text starts with `<local-command-caveat>` or `<local-command-stdout>` (or a `<command-message>` without a name), `command_name` is set to `"(command output)"`.
 
 Messages with `command_name` are displayed but are not counted as user messages.
 
