@@ -129,16 +129,16 @@ If `result[].functionResponse.response.error` exists, use the error text as summ
 
 ## Token Mapping
 
-Gemini reports cumulative `tokens.input`, so parser stores per-message delta.
+Gemini reports usage per API call. `tokens.input` is that call's full prompt size (the whole context sent, not a running total), and `tokens.cached` is the cached portion of that same prompt. This already matches the common cost contract, so the values map directly with no deltas.
 
 | Native field | Common field |
 |---|---|
-| `tokens.input - previous tokens.input` | `tokens_in` |
+| `tokens.input` | `tokens_in` |
 | `tokens.output` | `tokens_out` |
 | `tokens.cached` | `tokens_cached` |
 | `tokens.thoughts` | `tokens_thinking` |
 
-The first assistant message uses raw `tokens.input` as its delta.
+Billable input is `tokens_in - tokens_cached`, as for every other parser. Because the prompt is re-sent on every call, `Transcript.total_tokens_in` is the sum of per-call prompt sizes, not the size of the final context.
 
 Gemini also reports `tokens.tool` and `tokens.total` in observed logs. These are currently ignored because the common model does not have separate tool-token or total-token fields; `tokens_in`, `tokens_out`, `tokens_cached`, and `tokens_thinking` remain the supported cost/display fields.
 

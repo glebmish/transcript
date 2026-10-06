@@ -146,7 +146,6 @@ def parse(path: str) -> Transcript:
         raise ValueError("expected a JSON object at the top level")
 
     messages: list[Message] = []
-    prev_input = 0
 
     for entry_num, entry in enumerate(as_list(data.get("messages")), 1):
         if not isinstance(entry, dict):
@@ -173,15 +172,15 @@ def parse(path: str) -> Transcript:
         elif msg_type == "gemini":
             tokens = as_dict(entry.get("tokens"))
             model = as_str(entry.get("model")) or None
-            full_input = as_int(tokens.get("input"))
-            delta_input = full_input - prev_input if prev_input > 0 else full_input
-            prev_input = full_input
 
+            # tokens.input is this API call's full prompt size and tokens.cached
+            # is the cached portion of it, which matches the common contract
+            # (billable input = tokens_in - tokens_cached). No deltas.
             msg = Message(
                 role=Role.ASSISTANT,
                 timestamp=ts,
                 model=model,
-                tokens_in=delta_input,
+                tokens_in=as_int(tokens.get("input")),
                 tokens_out=as_int(tokens.get("output")),
                 tokens_cached=as_int(tokens.get("cached")),
                 tokens_thinking=as_int(tokens.get("thoughts")),

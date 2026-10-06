@@ -55,12 +55,41 @@ def test_parse_tool_call_cancelled():
     assert tc.status == Status.CANCELLED
 
 
-def test_parse_input_token_delta():
+def test_parse_input_tokens_are_per_call_full_prompt():
     t = parse(FIXTURE)
-    msg1 = t.messages[1]  # first gemini, raw input=5000
-    msg2 = t.messages[3]  # second gemini, raw input=8000, delta=3000
+    msg1 = t.messages[1]  # first gemini, tokens.input=5000
+    msg2 = t.messages[3]  # second gemini, tokens.input=8000
     assert msg1.tokens_in == 5000
-    assert msg2.tokens_in == 3000
+    assert msg2.tokens_in == 8000
+
+
+def test_input_tokens_are_not_deltas(tmp_path):
+    """tokens.input is each call's full prompt; tokens_cached is its cached part.
+
+    Storing deltas made billable = tokens_in - tokens_cached wrong (and could go
+    negative once the context shrank, e.g. after compression).
+    """
+    calls = [(50000, 0), (52000, 48000), (8000, 0)]
+    p = tmp_path / "gemini_token_semantics.json"
+    p.write_text(json.dumps({
+        "sessionId": "token-semantics",
+        "messages": [
+            {
+                "type": "gemini",
+                "timestamp": f"2026-01-01T10:00:0{i}Z",
+                "model": "gemini-2.5-flash",
+                "content": f"reply {i}",
+                "tokens": {"input": inp, "output": 10, "cached": cached, "thoughts": 0},
+            }
+            for i, (inp, cached) in enumerate(calls)
+        ],
+    }))
+
+    t = parse(str(p))
+    assert [m.tokens_in for m in t.messages] == [50000, 52000, 8000]
+    assert [m.tokens_cached for m in t.messages] == [0, 48000, 0]
+    assert all(m.tokens_in >= m.tokens_cached >= 0 for m in t.messages)
+    assert t.total_tokens_in == 110000
 
 
 def test_parse_cached_tokens():
