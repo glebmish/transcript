@@ -106,6 +106,11 @@ full output
 
 With `expand_tools`, output must not be truncated.
 
+Log content must never be able to close a code span or fence early and break the rest of the document:
+
+- Fences (expanded output and batched compact lines) use one backtick more than the longest backtick run in the content, minimum 3. Output containing a ```` ``` ```` block gets a ```` ```` ```` fence.
+- Inline code spans use one backtick more than the longest backtick run in the content. When the content starts or ends with a backtick, it is padded with one space on each side, per CommonMark.
+
 ## Control Characters
 
 The final rendered string is passed through `sanitize_text` (see "Control Characters" in `docs/specs/presentation.md`), so stdout, `-o` files, and `--pretty` output never contain raw control characters from the log.

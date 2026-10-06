@@ -133,3 +133,48 @@ def test_render_empty():
                           total_cost=None, tool_stats=ToolStats(0, 0, 0))
     md = render(t)
     assert "No messages" in md
+
+
+def _tool_msg(tc, ordered=True):
+    return Message(
+        role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+        text=["after"], tool_calls=[tc],
+        content_order=[("tool", 0), ("text", 0)] if ordered else [],
+    )
+
+
+def test_expanded_fence_longer_than_backticks_in_output():
+    output = "```python\nprint('x')\n```\n\n# Not a heading\n`````"
+    tc = ToolCall(name="Read", display_name="Read", summary="/README.md",
+                  result_summary="6 lines", result_full=output, status=Status.PASSED)
+    for ordered in (True, False):
+        md = render(_make_transcript([_tool_msg(tc, ordered)]), RenderOptions(expand_tools=True))
+        assert "``````\n" + output + "\n``````" in md
+
+
+def test_expanded_fence_minimum_is_three_backticks():
+    tc = ToolCall(name="Bash", display_name="Bash", summary="ls",
+                  result_summary="ok", result_full="a `b` c", status=Status.PASSED)
+    md = render(_make_transcript([_tool_msg(tc)]), RenderOptions(expand_tools=True))
+    assert "```\na `b` c\n```" in md
+
+
+def test_compact_inline_span_longer_than_backticks():
+    tc = ToolCall(name="Bash", display_name="Bash", summary="echo ``x``",
+                  result_summary="ok", result_full="", status=Status.PASSED)
+    md = render(_make_transcript([_tool_msg(tc)]))
+    assert "```Bash: echo ``x`` → ok```" in md
+
+
+def test_compact_inline_span_padded_when_edge_is_backtick():
+    tc = ToolCall(name="Bash", display_name="Bash", summary="echo",
+                  result_summary="`ok`", result_full="", status=Status.PASSED)
+    md = render(_make_transcript([_tool_msg(tc)]))
+    assert "`` Bash: echo → `ok` ``" in md
+
+
+def test_compact_batch_fence_longer_than_backticks():
+    tc = ToolCall(name="Bash", display_name="Bash", summary="cat ```",
+                  result_summary="ok", result_full="", status=Status.PASSED)
+    md = render(_make_transcript([_tool_msg(tc, ordered=False)]))
+    assert "````\nBash: cat ``` → ok\n````" in md

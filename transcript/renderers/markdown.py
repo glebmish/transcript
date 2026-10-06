@@ -1,6 +1,7 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime
-from transcript.model import Status, Role, Message, Transcript
+from transcript.model import Status, Role, Message, ToolCall, Transcript
 from transcript.pricing import estimate_cost
 from transcript.sanitize import sanitize_text
 
@@ -41,6 +42,36 @@ def _fmt_duration(start: datetime, end: datetime) -> str:
 
 def _fmt_ts(ts: datetime) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+
+_BACKTICK_RUN_RE = re.compile(r"`+")
+
+
+def _longest_backtick_run(text: str) -> int:
+    return max((len(run) for run in _BACKTICK_RUN_RE.findall(text)), default=0)
+
+
+def _fence(content: str) -> str:
+    """Code fence longer than any backtick run in content (minimum 3)."""
+    return "`" * max(3, _longest_backtick_run(content) + 1)
+
+
+def _inline_code(content: str) -> str:
+    """Inline code span that log content cannot close early (CommonMark rules)."""
+    ticks = "`" * (_longest_backtick_run(content) + 1)
+    if content.startswith("`") or content.endswith("`"):
+        content = f" {content} "
+    return f"{ticks}{content}{ticks}"
+
+
+def _expanded_tool_lines(tc: ToolCall) -> list[str]:
+    marker = "x " if tc.status == Status.FAILED else "~ " if tc.status == Status.CANCELLED else "  "
+    lines = [f"{marker}{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}"]
+    if tc.result_full:
+        fence = _fence(tc.result_full)
+        lines += ["", fence, tc.result_full, fence]
+    lines.append("")
+    return lines
 
 
 def _role_label(role: Role) -> str:
@@ -128,16 +159,9 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
                 elif kind == "tool" and opts.show_tools and idx < len(m.tool_calls):
                     tc = m.tool_calls[idx]
                     if opts.expand_tools:
-                        marker = "x " if tc.status == Status.FAILED else "~ " if tc.status == Status.CANCELLED else "  "
-                        lines.append(f"{marker}{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
-                        if tc.result_full:
-                            lines.append("")
-                            lines.append("```")
-                            lines.append(tc.result_full)
-                            lines.append("```")
-                        lines.append("")
+                        lines.extend(_expanded_tool_lines(tc))
                     else:
-                        lines.append(f"`{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}`")
+                        lines.append(_inline_code(f"{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}"))
                         lines.append("")
         else:
             if opts.show_thinking:
@@ -154,20 +178,13 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
             if opts.show_tools and m.tool_calls:
                 if opts.expand_tools:
                     for tc in m.tool_calls:
-                        marker = "x " if tc.status == Status.FAILED else "~ " if tc.status == Status.CANCELLED else "  "
-                        lines.append(f"{marker}{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
-                        if tc.result_full:
-                            lines.append("")
-                            lines.append("```")
-                            lines.append(tc.result_full)
-                            lines.append("```")
-                        lines.append("")
+                        lines.extend(_expanded_tool_lines(tc))
                 else:
-                    lines.append("```")
-                    for tc in m.tool_calls:
-                        lines.append(f"{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}")
-                    lines.append("```")
-                    lines.append("")
+                    batch = "\n".join(
+                        f"{tc.display_name}: {tc.summary} \u2192 {tc.result_summary}" for tc in m.tool_calls
+                    )
+                    fence = _fence(batch)
+                    lines += [fence, batch, fence, ""]
 
     # Log-derived text may contain terminal control sequences; make them inert
     # once here so stdout, -o files and --pretty are all covered.
