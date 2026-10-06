@@ -238,3 +238,31 @@ def test_null_and_wrong_type_nested_fields_do_not_abort(tmp_path):
     assert len(assistants[1].tool_calls) == 1
     assert assistants[1].tool_calls[0].result_full == ""
     assert assistants[2].tokens_in == 5
+
+
+def test_synthetic_model_not_counted_as_model_or_partial_cost(tmp_path):
+    p = tmp_path / "synthetic.jsonl"
+    lines = [
+        {"type": "user", "timestamp": "2026-01-01T10:00:00Z", "message": {"role": "user", "content": "hi"}},
+        {"type": "assistant", "timestamp": "2026-01-01T10:00:01Z", "message": {
+            "id": "msg_real", "role": "assistant", "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": "hello"}],
+            "usage": {"input_tokens": 1000, "output_tokens": 100},
+        }},
+        {"type": "user", "timestamp": "2026-01-01T10:00:02Z", "message": {"role": "user", "content": "stop"}},
+        {"type": "assistant", "timestamp": "2026-01-01T10:00:03Z", "isApiErrorMessage": True, "message": {
+            "id": "msg_synth", "role": "assistant", "model": "<synthetic>",
+            "content": [{"type": "text", "text": "API Error: synthetic placeholder"}],
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+        }},
+    ]
+    p.write_text("\n".join(json.dumps(line) for line in lines))
+
+    t = parse(str(p))
+    assert t.models == {"claude-sonnet-4-6"}
+    assert t.cost_is_partial is False
+    assert t.total_cost is not None
+    # The placeholder message itself is kept: nothing is filtered out.
+    synthetic = [m for m in t.messages if m.model == "<synthetic>"]
+    assert len(synthetic) == 1
+    assert synthetic[0].text == ["API Error: synthetic placeholder"]

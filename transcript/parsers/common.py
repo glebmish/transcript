@@ -26,3 +26,13 @@ def as_int(value) -> int:
     if isinstance(value, float):
         return int(value)
     return 0
+
+
+# Claude Code writes this pseudo-model on placeholder assistant entries
+# (interrupts, API errors). It is not a real model and made no API call.
+SYNTHETIC_MODEL = "<synthetic>"
+
+
+def is_real_model(model: str | None) -> bool:
+    """True for a model name that should be listed and priced."""
+    return bool(model) and model != SYNTHETIC_MODEL

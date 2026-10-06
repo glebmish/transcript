@@ -74,7 +74,7 @@ class Transcript:
 
 `Transcript.start_time` and `Transcript.end_time` are normalized `datetime` values. Missing timestamps use `datetime.min` with UTC timezone.
 
-`Transcript.models` contains the set of assistant model names found in parsed messages.
+`Transcript.models` contains the set of assistant model names found in parsed messages. The pseudo-model `<synthetic>` (Claude Code placeholder entries) is excluded from `models` and from cost estimation, so it never makes cost partial; the messages themselves are kept.
 
 `Message.text` contains user-visible message text. It preserves raw local-command XML and other session internals when the native log exposes them as message text.
 

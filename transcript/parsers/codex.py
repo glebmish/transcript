@@ -4,7 +4,7 @@ import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
-from transcript.parsers.common import as_dict, as_int, as_str
+from transcript.parsers.common import as_dict, as_int, as_str, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 _EXIT_RE = re.compile(r"(?:Process exited with code|Exit code:)\s*(-?\d+)")
@@ -425,7 +425,7 @@ def _build_transcript(
     cost_is_partial = False
 
     for m in messages:
-        if m.role == Role.ASSISTANT and m.model:
+        if m.role == Role.ASSISTANT and is_real_model(m.model):
             models.add(m.model)
         total_in += m.tokens_in
         total_out += m.tokens_out
@@ -438,7 +438,7 @@ def _build_transcript(
                 cancelled += 1
 
     for m in messages:
-        if m.role == Role.ASSISTANT and m.model:
+        if m.role == Role.ASSISTANT and is_real_model(m.model):
             c = estimate_cost(m.model, m.tokens_in, m.tokens_out, m.tokens_cached)
             if c is not None:
                 total_cost += c

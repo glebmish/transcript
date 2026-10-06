@@ -77,6 +77,8 @@ Assistant entries with the same `message.id` are streaming fragments of the same
 
 When a new `message.id` appears, the previous assistant message is finalized and a new `Message` is started.
 
+Claude Code writes `model: "<synthetic>"` on placeholder assistant entries it generates locally (interrupts, API errors). These are kept as normal assistant messages with `Message.model = "<synthetic>"`, but they are not added to `Transcript.models` and are skipped for cost estimation, since no API call was made.
+
 ## Tool Use Resolution
 
 Claude tool uses are matched to results by ID.
