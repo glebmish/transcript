@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
+from transcript.sanitize import sanitize_text
 from transcript.parsers.common import as_dict, as_int, as_str, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
@@ -226,7 +227,10 @@ def parse(path: str) -> Transcript:
                     "informational",
                     "scheduled_task_fire",
                 ):
-                    print(f"Warning: unknown system subtype '{subtype}' at line {line_num}", file=sys.stderr)
+                    print(
+                        f"Warning: unknown system subtype '{sanitize_text(str(subtype))}' at line {line_num}",
+                        file=sys.stderr,
+                    )
                 continue
 
             if entry_type not in ("user", "assistant"):

@@ -106,6 +106,12 @@ full output
 
 With `expand_tools`, output must not be truncated.
 
+## Control Characters
+
+The final rendered string is passed through `sanitize_text` (see "Control Characters" in `docs/specs/presentation.md`), so stdout, `-o` files, and `--pretty` output never contain raw control characters from the log.
+
+Fenced and inline code spans are sized so log content cannot close them early; see "Tool Calls".
+
 ## Special Messages
 
 Compaction markers render as:

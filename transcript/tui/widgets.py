@@ -2,6 +2,7 @@ import textwrap
 from textual.widgets import Static, Input
 from textual.containers import VerticalScroll, Horizontal
 from textual.content import Content
+from textual.markup import escape
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from transcript.model import Status, Role, Message, Transcript, ToolCall
@@ -208,7 +209,7 @@ class ConversationPanel(VerticalScroll):
         else:
             cost_str = "$?"
 
-        model_str = ", ".join(sorted(t.models)) or "unknown"
+        model_str = escape(", ".join(sorted(t.models)) or "unknown")
         delta = t.end_time - t.start_time
         total_s = int(delta.total_seconds())
         if total_s >= 3600:
@@ -246,7 +247,7 @@ class ConversationPanel(VerticalScroll):
         ts_str = msg.timestamp.strftime("%H:%M:%S")
 
         if msg.command_name:
-            cmd_label = f"'{msg.command_name}' command" if msg.command_name != "(command output)" else "command output"
+            cmd_label = f"'{escape(msg.command_name)}' command" if msg.command_name != "(command output)" else "command output"
             yield MessageHeaderWidget(f"[bold green]## User ({cmd_label}) \u00b7 {ts_str}[/bold green]")
             for t in msg.text:
                 dedented = "\n".join(line.strip() for line in t.splitlines())

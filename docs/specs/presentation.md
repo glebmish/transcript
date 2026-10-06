@@ -25,7 +25,7 @@ Cost and token display can be hidden by renderer options, but the default is to 
 
 User messages show timestamp and text.
 
-Text should be preserved as parsed. The tool is for full visibility into session internals, so renderers should not sanitize, summarize, or omit user text unless an explicit view option asks for less content.
+Text should be preserved as parsed. The tool is for full visibility into session internals, so renderers should not summarize or omit user text unless an explicit view option asks for less content. The only transformation is the control-character rendering described below, which keeps every character visible.
 
 When a parser cannot represent native media directly in the common model, it should emit a visible placeholder such as `[image: base64]` in message text rather than silently dropping the block.
 
@@ -155,6 +155,24 @@ The full raw command text should be preserved in `Message.text`.
 Native entries may be skipped when they are internal runtime metadata with no stable user-facing transcript meaning. Examples include transient API retry notices, hook progress, prompt queue bookkeeping, permission-mode changes, and deferred attachment metadata.
 
 Agent docs must list skipped native entry types and why they are skipped.
+
+## Control Characters
+
+Log text is untrusted and may contain raw terminal control characters: ANSI/CSI escape sequences, OSC sequences such as OSC 52 clipboard writes or OSC 0/2 title changes, C1 controls, and lone carriage returns. Writing these to a terminal would execute them.
+
+Every renderer must make them visible but inert (`transcript/sanitize.py`), rather than strip them:
+
+| Input | Rendered as |
+|---|---|
+| `\r\n` | normalized to `\n` |
+| `\n`, `\t` | kept |
+| other C0 controls `\x00`-`\x1f`, including lone `\r` | Unicode Control Picture `U+2400 + code` (ESC -> `␛`, CR -> `␍`, BEL -> `␇`) |
+| DEL `\x7f` | `␡` |
+| C1 controls `\x80`-`\x9f` | literal escape text, e.g. `\x9b` |
+
+For example, an OSC 52 payload `ESC ]52;c;...ESC \` renders as `␛]52;c;...␛\`.
+
+The same rule applies to log-derived text echoed in stderr warnings.
 
 ## Unknown Or Malformed Data
 

@@ -98,3 +98,24 @@ def test_deeply_nested_json_reports_clean_error(tmp_path):
     assert r.returncode == 1
     assert "Traceback" not in r.stderr
     assert "Error" in r.stderr
+
+
+def test_stdout_has_no_terminal_escapes(tmp_path):
+    import json as _json
+    osc52 = "\x1b]52;c;ZWNobyBwd25lZAo=\x1b\\"
+    log = tmp_path / "evil.jsonl"
+    log.write_text("\n".join(_json.dumps(e) for e in [
+        {"type": "user", "timestamp": "2026-01-01T10:00:00Z", "message": {"role": "user", "content": f"hi {osc52}"}},
+        {"type": "assistant", "timestamp": "2026-01-01T10:00:01Z", "message": {
+            "id": "m1", "role": "assistant", "model": "claude-sonnet-4-6",
+            "content": [{"type": "thinking", "thinking": f"t {osc52}"}, {"type": "text", "text": f"a {osc52}"}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}}},
+    ]))
+    for extra in ([], ["--pretty"], ["--expand-tools"]):
+        r = _run(*extra, str(log))
+        assert r.returncode == 0
+        assert "\x1b]52" not in r.stdout
+    out = tmp_path / "out.md"
+    r = _run("-o", str(out), str(log))
+    assert r.returncode == 0
+    assert "\x1b" not in out.read_text()

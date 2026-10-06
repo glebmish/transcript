@@ -4,7 +4,9 @@ from textual.reactive import reactive
 from textual.widgets import Header, Footer, Static, Input
 from textual.containers import Horizontal
 from textual.events import Key
+from textual.markup import escape
 from transcript.model import Transcript
+from transcript.sanitize import sanitize_transcript
 from transcript.tui.widgets import (
     ConversationPanel, DetailPanel, ToolCallWidget, ThinkingWidget,
     MessageHeaderWidget, MessageTextWidget, GutterRow,
@@ -47,7 +49,8 @@ class TranscriptApp(App):
 
     def __init__(self, transcript: Transcript):
         super().__init__()
-        self.transcript = transcript
+        # Sanitize once so no widget can emit raw control characters from the log.
+        self.transcript = sanitize_transcript(transcript)
         self._search_visible = False
         self._visibility_index = 0
         self._last_conv_focus = None
@@ -211,7 +214,7 @@ class TranscriptApp(App):
         if not matches:
             self._last_query = None
             self._last_match_index = -1
-            search.border_title = f"(0 results for {query!r})"
+            search.border_title = escape(f"(0 results for {query!r})")
             return
         self._last_query = query
         self._last_match_index = 0

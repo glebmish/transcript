@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
+from transcript.sanitize import sanitize_text
 from transcript.parsers.common import as_dict, as_int, as_str, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
@@ -406,7 +407,10 @@ def parse(path: str) -> Transcript:
                 continue
 
             if item_type:
-                print(f"Warning: unknown Codex response item type '{item_type}' at line {line_num}", file=sys.stderr)
+                print(
+                    f"Warning: unknown Codex response item type '{sanitize_text(str(item_type))}' at line {line_num}",
+                    file=sys.stderr,
+                )
 
     finalize_assistant()
     return _build_transcript(messages, session_id, start_time, end_time)

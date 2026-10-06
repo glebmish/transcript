@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from transcript.model import Status, Role, Message, Transcript
 from transcript.pricing import estimate_cost
+from transcript.sanitize import sanitize_text
 
 
 @dataclass
@@ -168,4 +169,6 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
                     lines.append("```")
                     lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    # Log-derived text may contain terminal control sequences; make them inert
+    # once here so stdout, -o files and --pretty are all covered.
+    return sanitize_text("\n".join(lines).rstrip() + "\n")

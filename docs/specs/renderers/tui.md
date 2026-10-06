@@ -10,6 +10,12 @@ It must follow `docs/specs/presentation.md` for meaning and visibility rules.
 transcript view <input_file>
 ```
 
+## Untrusted Text
+
+The app sanitizes the whole `Transcript` once (`sanitize_transcript`) before building any widget, so no row or detail view can emit raw control characters from the log (see "Control Characters" in `docs/specs/presentation.md`).
+
+Log-derived strings are never interpreted as Textual markup. They are passed as plain text, built with `Content.assemble`, inserted as `Content.from_markup` variables, or escaped with `textual.markup.escape` when they must sit inside a markup string (model names in the summary header, slash-command names). A model named `bad[/nope]` displays literally.
+
 ## Layout
 
 The TUI uses two panels:
