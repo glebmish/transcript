@@ -3,7 +3,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
-from transcript.pricing import estimate_cost
+from transcript.pricing import message_cost
 from transcript.sanitize import sanitize_text
 from transcript.parsers.common import as_dict, as_int, as_str, count_label, is_real_model
 
@@ -211,7 +211,8 @@ def _make_tool_call(pending: dict, output: str, patch_event: dict | None = None)
 def _apply_token_usage(msg: Message, usage: dict) -> None:
     msg.tokens_in += as_int(usage.get("input_tokens"))
     msg.tokens_out += as_int(usage.get("output_tokens"))
-    msg.tokens_cached += as_int(usage.get("cached_input_tokens"))
+    # input_tokens already includes cached_input_tokens (cache reads).
+    msg.tokens_cache_read += as_int(usage.get("cached_input_tokens"))
     msg.tokens_thinking += as_int(usage.get("reasoning_output_tokens"))
 
 
@@ -454,7 +455,7 @@ def _build_transcript(
 
     for m in messages:
         if m.role == Role.ASSISTANT and is_real_model(m.model):
-            c = estimate_cost(m.model, m.tokens_in, m.tokens_out, m.tokens_cached)
+            c = message_cost(m)
             if c is not None:
                 total_cost += c
             else:

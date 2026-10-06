@@ -60,7 +60,9 @@ def test_parse_tokens_sum_last_usage_events():
     msg = t.messages[2]
     assert msg.tokens_in == 1200
     assert msg.tokens_out == 75
-    assert msg.tokens_cached == 900
+    assert msg.tokens_cache_read == 900
+    assert msg.tokens_cache_write_5m == 0
+    assert msg.tokens_cache_write_1h == 0
     assert msg.tokens_thinking == 12
     assert t.total_tokens_in == 1200
     assert t.total_tokens_out == 75
@@ -233,3 +235,11 @@ def test_output_without_matching_call_is_kept(tmp_path, capsys):
 def test_single_long_line_output_is_singular(tmp_path):
     tc = _single_tool_output(tmp_path, "x" * 60)
     assert tc.result_summary == "1 line"
+
+
+def test_codex_cost_stays_unknown_with_cached_reads():
+    t = parse(FIXTURE)
+    msg = t.messages[2]
+    assert msg.tokens_cache_read == 900
+    assert t.total_cost is None
+    assert t.cost_is_partial is True

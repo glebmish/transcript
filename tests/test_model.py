@@ -33,7 +33,9 @@ def test_message_defaults():
     assert msg.model is None
     assert msg.tokens_in == 0
     assert msg.tokens_out == 0
-    assert msg.tokens_cached == 0
+    assert msg.tokens_cache_read == 0
+    assert msg.tokens_cache_write_5m == 0
+    assert msg.tokens_cache_write_1h == 0
     assert msg.tokens_thinking == 0
     assert msg.thinking == []
     assert msg.text == []

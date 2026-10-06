@@ -2,7 +2,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
-from transcript.pricing import estimate_cost
+from transcript.pricing import message_cost
 from transcript.sanitize import sanitize_text
 from transcript.parsers.common import as_dict, as_int, as_list, as_str, count_label, is_real_model
 
@@ -194,14 +194,16 @@ def parse(path: str) -> Transcript:
 
             # tokens.input is this API call's full prompt size and tokens.cached
             # is the cached portion of it, which matches the common contract
-            # (billable input = tokens_in - tokens_cached). No deltas.
+            # (tokens_in = full context, tokens_cache_read = its cached part).
+            # No deltas. Gemini CLI uses implicit caching, so there are no
+            # cache writes to record.
             msg = Message(
                 role=Role.ASSISTANT,
                 timestamp=ts,
                 model=model,
                 tokens_in=as_int(tokens.get("input")),
                 tokens_out=as_int(tokens.get("output")),
-                tokens_cached=as_int(tokens.get("cached")),
+                tokens_cache_read=as_int(tokens.get("cached")),
                 tokens_thinking=as_int(tokens.get("thoughts")),
             )
 
@@ -270,7 +272,7 @@ def _build_transcript(messages: list[Message], data: dict) -> Transcript:
 
     for m in messages:
         if m.role == Role.ASSISTANT and is_real_model(m.model):
-            c = estimate_cost(m.model, m.tokens_in, m.tokens_out, m.tokens_cached)
+            c = message_cost(m)
             if c is not None:
                 total_cost += c
             else:

@@ -3,7 +3,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
-from transcript.pricing import estimate_cost
+from transcript.pricing import message_cost
 from transcript.sanitize import sanitize_text
 from transcript.parsers.common import as_dict, as_int, as_str, count_label, is_real_model
 
@@ -129,6 +129,23 @@ def _result_text(content) -> str:
     if content is None:
         return ""
     return json.dumps(content, indent=2, sort_keys=True, default=str)
+
+
+def _usage_breakdown(usage: dict) -> tuple[int, int, int, int]:
+    """Return (uncached_input, cache_read, cache_write_5m, cache_write_1h).
+
+    The cache-write total is split by TTL using usage.cache_creation when it is
+    an object; any part the breakdown does not attribute to 1h is billed as 5m.
+    Negative counts are treated as 0.
+    """
+    def count(d: dict, key: str) -> int:
+        return max(0, as_int(d.get(key)))
+
+    breakdown = as_dict(usage.get("cache_creation"))
+    w1h = count(breakdown, "ephemeral_1h_input_tokens")
+    w5m_reported = count(breakdown, "ephemeral_5m_input_tokens")
+    writes = max(count(usage, "cache_creation_input_tokens"), w5m_reported + w1h)
+    return count(usage, "input_tokens"), count(usage, "cache_read_input_tokens"), writes - w1h, w1h
 
 
 def _finalize_assistant(msg: Message) -> None:
@@ -342,23 +359,21 @@ def parse(path: str) -> Transcript:
                     current_msg_id = msg_id
 
                 # Claude's usage breakdown:
-                #   input_tokens = uncached, non-cache-write input (the billable portion)
-                #   cache_creation_input_tokens = tokens written to cache (treated as free)
-                #   cache_read_input_tokens = tokens read from cache (free)
+                #   input_tokens = uncached input (neither read from nor written to cache)
+                #   cache_creation_input_tokens = tokens written to cache, split by TTL in
+                #     cache_creation.ephemeral_5m_input_tokens / ephemeral_1h_input_tokens
+                #   cache_read_input_tokens = tokens read from cache
                 #
                 # tokens_in = total context = input + cache_creation + cache_read
-                # tokens_cached = cache_read + cache_creation (everything not charged)
-                # billable = tokens_in - tokens_cached = input_tokens
                 if msg_id:
-                    raw_input = as_int(usage.get("input_tokens"))
-                    cache_creation = as_int(usage.get("cache_creation_input_tokens"))
-                    cache_read = as_int(usage.get("cache_read_input_tokens"))
-                    total_in = raw_input + cache_creation + cache_read
-                    total_cached = cache_creation + cache_read
+                    raw_input, cache_read, w5m, w1h = _usage_breakdown(usage)
+                    total_in = raw_input + w5m + w1h + cache_read
 
                     current_assistant.tokens_in = max(current_assistant.tokens_in, total_in)
                     current_assistant.tokens_out = max(current_assistant.tokens_out, as_int(usage.get("output_tokens")))
-                    current_assistant.tokens_cached = max(current_assistant.tokens_cached, total_cached)
+                    current_assistant.tokens_cache_read = max(current_assistant.tokens_cache_read, cache_read)
+                    current_assistant.tokens_cache_write_5m = max(current_assistant.tokens_cache_write_5m, w5m)
+                    current_assistant.tokens_cache_write_1h = max(current_assistant.tokens_cache_write_1h, w1h)
                     if model:
                         current_assistant.model = model
 
@@ -419,7 +434,7 @@ def _build_transcript(messages: list[Message], session_id: str | None) -> Transc
 
     for m in messages:
         if m.role == Role.ASSISTANT and is_real_model(m.model):
-            c = estimate_cost(m.model, m.tokens_in, m.tokens_out, m.tokens_cached)
+            c = message_cost(m)
             if c is not None:
                 total_cost += c
             else:

@@ -208,3 +208,14 @@ def test_tool_call_header_omits_zero_cancelled():
     msg = Message(role=Role.USER, timestamp=TS1, text=["hi"])
     md = render(_make_transcript([msg], tool_stats=ToolStats(passed=2, failed=1, cancelled=0)))
     assert "- **Tool calls**: 3 (2 passed, 1 failed)\n" in md
+
+
+def test_assistant_header_cost_bills_cache_tokens():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                tokens_in=1_100_000, tokens_out=0, tokens_cache_read=1_000_000,
+                tokens_cache_write_1h=100_000, text=["hi"]),
+    ])
+    header = next(line for line in render(t).splitlines() if line.startswith("## Assistant"))
+    # ↑ stays total input context; cost = 1M reads @ $0.50 + 100k 1h writes @ $10
+    assert header == "## Assistant · 2026-01-01 10:00:00 · ↑1,100,000 ↓0 · $1.50"

@@ -1,5 +1,8 @@
 from pathlib import Path
 import json
+
+import pytest
+
 from transcript.parsers.claude import parse
 from transcript.model import Status, Role
 
@@ -64,7 +67,9 @@ def test_parse_tokens_cache_aware():
     msg = t.messages[1]
     assert msg.tokens_in == 10000
     assert msg.tokens_out == 500
-    assert msg.tokens_cached == 8000
+    assert msg.tokens_cache_read == 8000
+    assert msg.tokens_cache_write_5m == 0
+    assert msg.tokens_cache_write_1h == 0
 
 
 def test_parse_transcript_metadata():
@@ -84,10 +89,10 @@ def test_parse_tool_stats():
 
 def test_parse_cost():
     t = parse(FIXTURE)
-    # billable_in = (10000-8000) + (12000-9000) = 5000
-    # cost = 5000/1M * 5.00 + 800/1M * 25.00 = 0.025 + 0.02 = 0.045
+    # uncached = 2000 + 3000 = 5000 @ $5, cache reads = 8000 + 9000 = 17000 @ $0.50,
+    # output = 800 @ $25:  0.025 + 0.0085 + 0.02 = 0.0535
     assert t.total_cost is not None
-    assert abs(t.total_cost - 0.045) < 0.001
+    assert t.total_cost == pytest.approx(0.0535)
     assert t.cost_is_partial is False
 
 
@@ -397,3 +402,121 @@ def test_result_counts_of_one_are_singular():
     assert _tool_result_summary({"numMatches": 1})[0] == "1 match"
     assert _tool_result_summary({"numMatches": 2})[0] == "2 matches"
     assert _tool_result_summary({"file": {}})[0] == "? lines"
+
+
+def _assistant(msg_id, usage, model="claude-opus-4-6", ts="2026-01-01T10:00:01Z"):
+    return {"type": "assistant", "timestamp": ts, "message": {
+        "id": msg_id, "role": "assistant", "model": model,
+        "content": [{"type": "text", "text": "ok"}], "usage": usage,
+    }}
+
+
+def _parse_entries(tmp_path, entries):
+    p = tmp_path / "cache.jsonl"
+    user = {"type": "user", "timestamp": "2026-01-01T10:00:00Z",
+            "message": {"role": "user", "content": "go"}}
+    p.write_text("\n".join(json.dumps(e) for e in [user, *entries]))
+    t = parse(str(p))
+    return t, [m for m in t.messages if m.role == Role.ASSISTANT]
+
+
+def test_heavy_cache_session_cost(tmp_path):
+    t, (msg,) = _parse_entries(tmp_path, [_assistant("msg_1", {
+        "input_tokens": 208, "output_tokens": 79_000,
+        "cache_creation_input_tokens": 274_000, "cache_read_input_tokens": 18_200_000,
+    })])
+    assert msg.tokens_in == 208 + 274_000 + 18_200_000
+    assert msg.tokens_cache_read == 18_200_000
+    assert msg.tokens_cache_write_5m == 274_000
+    assert msg.tokens_cache_write_1h == 0
+    assert round(t.total_cost, 2) == 12.79
+
+
+def test_cache_creation_split_by_ttl(tmp_path):
+    t, (msg,) = _parse_entries(tmp_path, [_assistant("msg_1", {
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_creation_input_tokens": 150_000, "cache_read_input_tokens": 0,
+        "cache_creation": {"ephemeral_5m_input_tokens": 50_000, "ephemeral_1h_input_tokens": 100_000},
+    })])
+    assert msg.tokens_cache_write_5m == 50_000
+    assert msg.tokens_cache_write_1h == 100_000
+    assert msg.tokens_in == 150_000
+    # 50k @ $6.25 + 100k @ $10
+    assert t.total_cost == pytest.approx(0.3125 + 1.00)
+
+
+def test_cache_creation_remainder_is_5m(tmp_path):
+    _, (msg,) = _parse_entries(tmp_path, [_assistant("msg_1", {
+        "input_tokens": 10, "output_tokens": 1,
+        "cache_creation_input_tokens": 150_000,
+        "cache_creation": {"ephemeral_1h_input_tokens": 100_000},
+    })])
+    assert msg.tokens_cache_write_1h == 100_000
+    assert msg.tokens_cache_write_5m == 50_000
+
+
+def test_cache_creation_breakdown_without_total(tmp_path):
+    _, (msg,) = _parse_entries(tmp_path, [_assistant("msg_1", {
+        "input_tokens": 10, "output_tokens": 1,
+        "cache_creation": {"ephemeral_5m_input_tokens": 20_000, "ephemeral_1h_input_tokens": 30_000},
+    })])
+    assert msg.tokens_cache_write_5m == 20_000
+    assert msg.tokens_cache_write_1h == 30_000
+    assert msg.tokens_in == 10 + 50_000
+
+
+@pytest.mark.parametrize("cache_creation", [
+    None, "garbage", [1, 2], 42,
+    {"ephemeral_5m_input_tokens": None, "ephemeral_1h_input_tokens": "lots"},
+    {"ephemeral_1h_input_tokens": -500},
+])
+def test_null_or_garbage_cache_creation_is_all_5m(tmp_path, cache_creation):
+    t, (msg,) = _parse_entries(tmp_path, [_assistant("msg_1", {
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_creation_input_tokens": 100_000, "cache_read_input_tokens": 0,
+        "cache_creation": cache_creation,
+    })])
+    assert msg.tokens_cache_write_5m == 100_000
+    assert msg.tokens_cache_write_1h == 0
+    assert t.total_cost == pytest.approx(0.625)
+
+
+def test_streaming_entries_merge_cache_fields_with_max(tmp_path):
+    t, (msg,) = _parse_entries(tmp_path, [
+        _assistant("msg_s", {
+            "input_tokens": 5, "output_tokens": 1,
+            "cache_creation_input_tokens": 1000, "cache_read_input_tokens": 50_000,
+            "cache_creation": {"ephemeral_1h_input_tokens": 1000},
+        }),
+        _assistant("msg_s", {
+            "input_tokens": 5, "output_tokens": 300,
+            "cache_creation_input_tokens": 1000, "cache_read_input_tokens": 50_000,
+            "cache_creation": {"ephemeral_1h_input_tokens": 1000},
+        }),
+    ])
+    assert msg.tokens_in == 51_005
+    assert msg.tokens_out == 300
+    assert msg.tokens_cache_read == 50_000
+    assert msg.tokens_cache_write_1h == 1000
+    assert msg.tokens_cache_write_5m == 0
+
+
+def test_distinct_message_ids_sum_cache_cost(tmp_path):
+    usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 1_000_000}
+    t, assistants = _parse_entries(tmp_path, [
+        _assistant("msg_a", usage),
+        _assistant("msg_b", usage, ts="2026-01-01T10:00:02Z"),
+    ])
+    assert len(assistants) == 2
+    assert t.total_cost == pytest.approx(2 * 0.50)
+
+
+def test_negative_cache_counts_are_ignored(tmp_path):
+    t, (msg,) = _parse_entries(tmp_path, [_assistant("msg_1", {
+        "input_tokens": 1000, "output_tokens": 0,
+        "cache_creation_input_tokens": -400, "cache_read_input_tokens": -600,
+    })])
+    assert msg.tokens_cache_read == 0
+    assert msg.tokens_cache_write_5m == 0
+    assert msg.tokens_in == 1000
+    assert t.total_cost == pytest.approx(1000 * 5 / 1e6)

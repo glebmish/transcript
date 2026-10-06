@@ -31,9 +31,14 @@ class Message:
     role: Role
     timestamp: datetime
     model: str | None = None
+    # Full input context of the call: uncached + cache writes + cache reads.
     tokens_in: int = 0
     tokens_out: int = 0
-    tokens_cached: int = 0
+    # Parts of tokens_in that were read from or written to the prompt cache.
+    # Uncached input = tokens_in - reads - writes (never below 0).
+    tokens_cache_read: int = 0
+    tokens_cache_write_5m: int = 0
+    tokens_cache_write_1h: int = 0
     tokens_thinking: int = 0
     thinking: list[str] = field(default_factory=list)
     text: list[str] = field(default_factory=list)

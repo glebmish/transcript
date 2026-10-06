@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from transcript.model import Status, Role, ToolCall, Transcript
 from transcript.parsers.common import is_real_model
-from transcript.pricing import estimate_cost
+from transcript.pricing import message_cost
 from transcript.sanitize import sanitize_text
 
 
@@ -145,7 +145,7 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
                 # Placeholder models such as <synthetic> made no API call:
                 # no cost, rather than an unknown "$?".
                 if is_real_model(m.model):
-                    msg_cost = estimate_cost(m.model, m.tokens_in, m.tokens_out, m.tokens_cached)
+                    msg_cost = message_cost(m)
                     header += f" \u00b7 {_fmt_cost(msg_cost)}"
             lines.append(header)
         else:

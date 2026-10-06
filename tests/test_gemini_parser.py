@@ -1,5 +1,8 @@
 from pathlib import Path
 import json
+
+import pytest
+
 from transcript.parsers.gemini import parse
 from transcript.model import Status, Role
 
@@ -64,9 +67,9 @@ def test_parse_input_tokens_are_per_call_full_prompt():
 
 
 def test_input_tokens_are_not_deltas(tmp_path):
-    """tokens.input is each call's full prompt; tokens_cached is its cached part.
+    """tokens.input is each call's full prompt; tokens.cached is its cached part.
 
-    Storing deltas made billable = tokens_in - tokens_cached wrong (and could go
+    Storing deltas made uncached input = tokens_in - tokens_cache_read wrong (and could go
     negative once the context shrank, e.g. after compression).
     """
     calls = [(50000, 0), (52000, 48000), (8000, 0)]
@@ -87,15 +90,17 @@ def test_input_tokens_are_not_deltas(tmp_path):
 
     t = parse(str(p))
     assert [m.tokens_in for m in t.messages] == [50000, 52000, 8000]
-    assert [m.tokens_cached for m in t.messages] == [0, 48000, 0]
-    assert all(m.tokens_in >= m.tokens_cached >= 0 for m in t.messages)
+    assert [m.tokens_cache_read for m in t.messages] == [0, 48000, 0]
+    assert all(m.tokens_in >= m.tokens_cache_read >= 0 for m in t.messages)
     assert t.total_tokens_in == 110000
 
 
 def test_parse_cached_tokens():
     t = parse(FIXTURE)
     msg = t.messages[1]
-    assert msg.tokens_cached == 3000
+    assert msg.tokens_cache_read == 3000
+    assert msg.tokens_cache_write_5m == 0
+    assert msg.tokens_cache_write_1h == 0
     assert msg.tokens_thinking == 100
 
 
@@ -250,7 +255,7 @@ def test_null_tokens_gives_zero_counts(tmp_path):
 
     t = parse(str(p))
     msg = t.messages[0]
-    assert (msg.tokens_in, msg.tokens_out, msg.tokens_cached, msg.tokens_thinking) == (0, 0, 0, 0)
+    assert (msg.tokens_in, msg.tokens_out, msg.tokens_cache_read, msg.tokens_thinking) == (0, 0, 0, 0)
 
 
 def test_error_and_warning_messages_become_system_messages(tmp_path, capsys):
@@ -283,3 +288,31 @@ def test_display_counts_of_one_are_singular():
     assert _summary_from_display({"files": ["a.py"]}) == "1 file"
     assert _summary_from_display({"other": 1}) == "1 field"
     assert _summary_from_display({"a": 1, "b": 2}) == "2 fields"
+
+
+def test_cached_input_billed_at_ten_percent_without_write_charge(tmp_path):
+    p = tmp_path / "gemini_cache_cost.json"
+    p.write_text(json.dumps({
+        "sessionId": "cache-cost",
+        "messages": [{
+            "type": "gemini",
+            "timestamp": "2026-01-01T10:00:00Z",
+            "model": "gemini-2.5-pro",
+            "content": "reply",
+            "tokens": {"input": 1_000_000, "output": 0, "cached": 800_000, "thoughts": 0},
+        }],
+    }))
+    t = parse(str(p))
+    msg = t.messages[0]
+    assert msg.tokens_cache_read == 800_000
+    assert msg.tokens_cache_write_5m == msg.tokens_cache_write_1h == 0
+    # 200k uncached @ $1.25 + 800k cached @ $0.125
+    assert t.total_cost == pytest.approx(0.25 + 0.10)
+
+
+def test_fixture_cost_includes_cached_reads():
+    t = parse(FIXTURE)
+    # gemini-2.5-flash: uncached (2000 + 3000) @ $0.30, cached (3000 + 5000) @ $0.03,
+    # output (200 + 150) @ $2.50
+    expected = (5000 * 0.30 + 8000 * 0.03 + 350 * 2.50) / 1e6
+    assert t.total_cost == pytest.approx(expected)
