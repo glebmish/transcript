@@ -121,6 +121,10 @@ Parsers should skip native internals only when the relevant agent mapping spec s
 
 Pricing is stored in `transcript/pricing.py` as input and output USD prices per 1M tokens, keyed by model-name prefix.
 
+A model name is priced by the longest key it starts with. This lets dated ids such as `claude-sonnet-4-5-20250929` resolve to `claude-sonnet-4-5`, and keeps a shorter key from capturing a longer, differently priced family (`gemini-2.5-flash` vs `gemini-2.5-flash-lite`, `claude-opus-5` vs `claude-opus-5-5`).
+
+OpenAI/Codex models are intentionally not priced, so Codex message and transcript cost is unknown (`$?`).
+
 Cached input tokens are treated as free. Cost is:
 
 ```text

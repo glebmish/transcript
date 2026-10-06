@@ -131,11 +131,31 @@ Cached tokens (cache reads and cache writes) are treated as free. Only uncached 
 
 | Model | Input (per 1M) | Output (per 1M) |
 |-------|---------------|-----------------|
+| claude-fable-5-1 | $10.00 | $50.00 |
+| claude-fable-5 | $10.00 | $50.00 |
+| claude-opus-5-5 | $4.00 | $20.00 |
+| claude-opus-5 | $5.00 | $25.00 |
+| claude-opus-4-8 | $5.00 | $25.00 |
+| claude-opus-4-7 | $5.00 | $25.00 |
 | claude-opus-4-6 | $5.00 | $25.00 |
+| claude-opus-4-5 | $5.00 | $25.00 |
+| claude-opus-4-1 | $15.00 | $75.00 |
+| claude-opus-4-0 (`claude-opus-4-20250514`) | $15.00 | $75.00 |
+| claude-sonnet-5-5 | $2.00 | $10.00 |
+| claude-sonnet-5 | $2.00 | $10.00 |
 | claude-sonnet-4-6 | $3.00 | $15.00 |
+| claude-sonnet-4-5 | $3.00 | $15.00 |
+| claude-sonnet-4-0 (`claude-sonnet-4-20250514`) | $3.00 | $15.00 |
 | claude-haiku-4-5 | $1.00 | $5.00 |
-| gemini-2.5-pro | $1.00 | $10.00 |
+| gemini-2.5-pro | $1.25 | $10.00 |
 | gemini-2.5-flash | $0.30 | $2.50 |
+| gemini-2.5-flash-lite | $0.10 | $0.40 |
+
+Model ids are matched by the longest table entry they start with, so dated ids such as `claude-sonnet-4-5-20250929` use the `claude-sonnet-4-5` price, and `gemini-2.5-flash-lite` is not priced as `gemini-2.5-flash`.
+
+`gemini-2.5-pro` uses the price for prompts up to 200k tokens; the higher long-prompt tier is not modeled.
+
+Models not in the table show cost as unknown (`$?`), or as `(partial)` when only some messages could be priced. This includes all OpenAI/Codex models: Codex transcripts show tokens but no cost estimate.
 
 ## Requirements
 

@@ -167,6 +167,8 @@ Attach each token-count event to the current assistant message for the turn. If 
 
 Cached input tokens are treated as free by the common cost contract.
 
+OpenAI models used by Codex are not in the pricing table, so Codex cost is always unknown (`$?`). Token counts are still shown.
+
 ## Status Mapping
 
 | Native condition | Common status |
