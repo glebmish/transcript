@@ -1,87 +1,182 @@
 # transcript
 
-Convert Claude Code, Gemini CLI, and Codex conversation logs into readable Markdown transcripts, or browse them interactively in a terminal UI.
+[![CI](https://github.com/glebmish/transcript/actions/workflows/ci.yml/badge.svg)](https://github.com/glebmish/transcript/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/glebmish/transcript)](https://github.com/glebmish/transcript/releases)
+[![License: MIT](https://img.shields.io/github/license/glebmish/transcript)](LICENSE)
+
+Turn a Claude Code, Gemini CLI or Codex session log into a readable Markdown transcript, or browse it in a terminal UI.
+
+Agent session logs are raw JSON or JSONL, with thinking, tool calls and tool output split across separate entries. `transcript` reassembles them into the conversation as it happened: every user message, thinking block, tool call with its result, token count and estimated cost. It is for people who use these agents and want to review, debug or share what a session actually did. Nothing is filtered out by default, and terminal control characters in the log are shown as visible symbols such as `␛`, never executed.
+
+```bash
+pipx install git+https://github.com/glebmish/transcript@v0.1.0
+transcript ~/.claude/projects/<project>/<session>.jsonl   # Markdown to stdout
+transcript view ~/.claude/projects/<project>/<session>.jsonl   # terminal UI
+```
 
 ## Install
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e .
-ln -sf "$(pwd)/.venv/bin/transcript" ~/.local/bin/transcript
-```
+Requires Python 3.12+. Tested in CI on Linux and macOS; Windows is untested. `transcript` is distributed from GitHub only; it is not on PyPI.
 
-## Usage
-
-### CLI — Markdown output
+Install from the release tag:
 
 ```bash
-# Auto-detects format (Claude JSONL, Gemini JSON, or Codex JSONL)
-transcript session.jsonl
-
-# Write to file
-transcript -o review.md session.jsonl
-
-# Tools-only view: what did the agent do?
-transcript --no-thinking --no-text session.jsonl
-
-# Just the header stats
-transcript --no-thinking --no-tools --no-text session.jsonl
-
-# Full tool output (no truncation)
-transcript --expand-tools session.jsonl
-
-# Hide cost/token info
-transcript --no-cost session.jsonl
-
-# Force format
-transcript --format claude session.jsonl
-transcript --format codex session.jsonl
+pipx install git+https://github.com/glebmish/transcript@v0.1.0
+# or
+uv tool install git+https://github.com/glebmish/transcript@v0.1.0
+# or, inside a virtualenv
+pip install git+https://github.com/glebmish/transcript@v0.1.0
 ```
 
-### TUI — Interactive viewer
+Or install the wheel attached to the [GitHub release](https://github.com/glebmish/transcript/releases/tag/v0.1.0):
+
+```bash
+pipx install https://github.com/glebmish/transcript/releases/download/v0.1.0/transcript-0.1.0-py3-none-any.whl
+# or
+uv tool install https://github.com/glebmish/transcript/releases/download/v0.1.0/transcript-0.1.0-py3-none-any.whl
+```
+
+If pipx's default Python is older than 3.12, add `--python python3.12`. To work from a checkout, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Check the install:
+
+```console
+$ transcript --version
+transcript 0.1.0
+```
+
+## Markdown output
+
+```bash
+transcript session.jsonl                       # print to stdout; the format is auto-detected
+transcript -o review.md session.jsonl          # write to a file
+transcript --pretty session.jsonl              # render the Markdown in the terminal
+transcript --expand-tools session.jsonl        # include full tool output, untruncated
+transcript --no-thinking --no-text session.jsonl   # tool calls only: what did the agent do?
+transcript --format codex session.jsonl        # skip auto-detection
+```
+
+Output for the test fixture `tests/fixtures/claude_minimal.jsonl`:
+
+```markdown
+# Transcript
+
+- **Duration**: 2m 5s (2026-01-01 10:00:00 → 2026-01-01 10:02:05)
+- **Model(s)**: claude-opus-4-6
+- **Messages**: 4 (2 user, 2 assistant)
+- **Tool calls**: 2 (1 passed, 1 failed)
+- **Tokens**: ↑22,000 ↓800 · $0.04
+
+---
+
+## User · 2026-01-01 10:00:00
+
+Help me refactor auth
+
+
+---
+
+## Assistant · 2026-01-01 10:00:05 · ↑10,000 ↓500 · $0.02
+
+> Let me look at auth code.
+
+I'll read the middleware.
+
+`Read: /src/auth.py → 84 lines`
+
+
+--- conversation compacted ---
+
+---
+
+## User · 2026-01-01 10:02:00
+
+Focus on JWT validation
+
+
+---
+
+## Assistant · 2026-01-01 10:02:05 · ↑12,000 ↓300 · $0.02
+
+I'll look at JWT handling.
+
+`Bash: Run tests → FAILED (exit 1)`
+```
+
+`↑` is input tokens (including cached), `↓` is output tokens. Thinking is quoted with `>`. Each tool call is one line, `name: summary → result`; `--expand-tools` adds the full output under it:
+
+````markdown
+x Bash: Run tests → FAILED (exit 1)
+
+```
+FAILED test_auth.py::test_jwt
+AssertionError: expected 200 got 401
+```
+````
+
+### Options
+
+| Option | Effect |
+|--------|--------|
+| `-f`, `--format {claude,gemini,codex}` | Log format; auto-detected if omitted |
+| `-o`, `--output FILE` | Write to a file instead of stdout |
+| `--no-thinking` | Leave out thinking blocks |
+| `--no-tools` | Leave out tool calls |
+| `--no-text` | Leave out message text, user and assistant |
+| `--no-cost` | Leave out token counts and cost |
+| `--expand-tools` | Show full tool output |
+| `--pretty` | Render the Markdown in the terminal |
+| `--version` | Print the version |
+
+The `--no-*` flags remove content but keep the structure: every message heading is still printed.
+
+## Terminal UI
 
 ```bash
 transcript view session.jsonl
 ```
 
-```
-+-- Conversation ------------------------------------+-- Detail ----------------+
-| # Transcript                                       |                          |
-| Duration: 12m · claude-opus-4-6                    |  (empty until            |
-| Messages: 8 · Tools: 12 (1 x) · $0.42             |   something is           |
-|                                                    |   selected)              |
-| -------------------------------------------------- |                          |
-|                                                    |                          |
-| ## User · 14:02:03                                 |                          |
-| Help me refactor auth                              |                          |
-|                                                    |                          |
-| ## Assistant · 14:02:08 · ^12k v1.2k               |                          |
-| > Thinking (3 lines)                         [>]   |                          |
-|                                                    |                          |
-| I'll start by reading the middleware.              |                          |
-|                                                    |                          |
-|   Read: /src/auth.py -> 84 lines             [>]   |                          |
-|   Grep: session_token in src/ -> 12          [>]   |                          |
-| x Bash: pytest tests/ -> FAILED              [>]   |                          |
-|                                                    |                          |
-| ## User · 14:03:15                                 |                          |
-| focus on the jwt validation                        |                          |
-+----------------------------------------------------+--------------------------+
- [t]hinking [/]search [q]uit [tab]panel [h]ide [?]help
-```
+`view` accepts the same `--format` option. The conversation is on the left; press Enter on a tool call to open it in the detail panel on the right. Here the failed `Bash` call is selected:
 
-**Keybindings:**
+```
+┌────────────────────────────────────────────────────────────────┐┌────────────────────────────────┐
+│  # Transcript                                                  ││Bash: Run tests                 │
+│  Duration: 2m 5s · claude-opus-4-6                             ││FAILED (exit 1)                 │
+│  Messages: 4 · Tools: 2 (1 x) · $0.04                          ││FAILED test_auth.py::test_jwt   │
+│                                                                ││AssertionError: expected 200 got│
+│  ## User · 10:00:00                                            ││401                             │
+│  Help me refactor auth                                         ││                                │
+│                                                                ││                                │
+│  ## Assistant · 10:00:05 · ↑10,000 ↓500                        ││                                │
+││ Thinking (1 line)  [>]                                        ││                                │
+│  I'll read the middleware.                                     ││                                │
+││ Read /src/auth.py → 84 lines  [>]                             ││                                │
+│  ─── conversation compacted ───                                ││                                │
+│                                                                ││                                │
+│  ## User · 10:02:00                                            ││                                │
+│  Focus on JWT validation                                       ││                                │
+│                                                                ││                                │
+│  ## Assistant · 10:02:05 · ↑12,000 ↓300                        ││                                │
+│  I'll look at JWT handling.                                    ││                                │
+│▶✘Bash Run tests → FAILED (exit 1)  [>]                         ││                                │
+└────────────────────────────────────────────────────────────────┘└────────────────────────────────┘
+ tab Panel: right  q Quit  t Thinking  h Show: all  / Search  ? Help                    ▏^p palette
+```
 
 | Key | Action |
 |-----|--------|
-| `j/k`, Up/Down | Scroll conversation |
-| `Enter` | Expand focused item into detail panel |
-| `t` | Toggle all thinking blocks |
-| `h` | Cycle visibility: all / assistant only / user only |
-| `Tab` | Switch focus between panels |
-| `Esc` | Close detail panel |
-| `?` | Show help |
-| `q` | Quit |
+| `j`/`k`, Up/Down | Move between rows; scroll when the detail panel is focused |
+| `Enter` | Open the focused tool call in the detail panel. On a thinking block, the first press expands it and the second opens it in the panel |
+| `t` | Expand or collapse all thinking blocks |
+| `h` | Cycle what is shown: all → messages only → user + tools → all |
+| `/` | Search (case-insensitive); Enter jumps to the first match |
+| `n` / `N` | Next / previous search match |
+| `Tab` | Switch focus between the panels |
+| `Esc` | Close the search bar, or clear the detail panel |
+| `?` | Show the keybindings |
+| `q`, Ctrl+C | Quit |
+
+"Messages only" hides thinking and tool calls. "User + tools" shows user messages and tool calls, without assistant text.
 
 ## Log locations
 
@@ -91,46 +186,14 @@ transcript view session.jsonl
 | Gemini CLI | `~/.gemini/tmp/<hash>/chats/session-*.json` | JSON |
 | Codex CLI/Desktop | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | JSONL |
 
-Format is auto-detected. Use `--format claude`, `--format gemini`, or `--format codex` to override.
-
-## Output example
-
-```markdown
-# Transcript
-
-- **Duration**: 12m 34s (2026-03-18 14:02:03 -> 14:14:37)
-- **Model(s)**: claude-opus-4-6
-- **Messages**: 8 (3 user, 5 assistant)
-- **Tool calls**: 12 (11 passed, 1 failed)
-- **Tokens**: ^32,450 v8,120 · $0.42
-
----
-
-## User · 2026-03-18 14:02:03
-
-Help me refactor auth
-
----
-
-## Assistant · 2026-03-18 14:02:08 · ^12,300 v1,200 · $0.08
-
-> Let me explore the current auth implementation.
-
-I'll start by reading the middleware.
-
-```
-Read: /src/middleware/auth.py -> 84 lines
-Grep: session_token in src/ -> 12 matches
-Bash: pytest tests/ -> FAILED (exit 1)
-```
-```
+The format is auto-detected. Use `--format claude`, `--format gemini` or `--format codex` to override it.
 
 ## Cost estimation
 
-Cached tokens (cache reads and cache writes) are treated as free. Only uncached input tokens are billed.
+Costs are estimates from a built-in price table (USD per 1M tokens, prices checked 2026-10-06). Cache reads and cache writes are treated as free; only uncached input tokens and output tokens are billed, so real bills that include cache pricing will be somewhat higher.
 
-| Model | Input (per 1M) | Output (per 1M) |
-|-------|---------------|-----------------|
+| Model | Input | Output |
+|-------|------:|-------:|
 | claude-fable-5-1 | $10.00 | $50.00 |
 | claude-fable-5 | $10.00 | $50.00 |
 | claude-opus-5-5 | $4.00 | $20.00 |
@@ -151,13 +214,26 @@ Cached tokens (cache reads and cache writes) are treated as free. Only uncached 
 | gemini-2.5-flash | $0.30 | $2.50 |
 | gemini-2.5-flash-lite | $0.10 | $0.40 |
 
-Model ids are matched by the longest table entry they start with, so dated ids such as `claude-sonnet-4-5-20250929` use the `claude-sonnet-4-5` price, and `gemini-2.5-flash-lite` is not priced as `gemini-2.5-flash`.
+A model id uses the longest table entry it starts with, so `claude-sonnet-4-5-20250929` gets the `claude-sonnet-4-5` price, and `gemini-2.5-flash-lite` is not priced as `gemini-2.5-flash`.
 
-`gemini-2.5-pro` uses the price for prompts up to 200k tokens; the higher long-prompt tier is not modeled.
+Models not in the table show cost as `$?`, or as `(partial)` when only some messages could be priced. That includes all OpenAI/Codex models: Codex transcripts show tokens but no cost.
 
-Models not in the table show cost as unknown (`$?`), or as `(partial)` when only some messages could be priced. This includes all OpenAI/Codex models: Codex transcripts show tokens but no cost estimate.
+## Limitations
 
-## Requirements
+- One log file per run. There is no session browser or search across sessions; find the file yourself (see [Log locations](#log-locations)).
+- The three log formats are undocumented internals of each agent. A new agent version can change them, and `transcript` will lag until its parser is updated.
+- Prices are a static table. They are not fetched, and new models show `$?` until the table is updated.
+- `gemini-2.5-pro` is priced at the tier for prompts up to 200k tokens; the higher long-prompt tier is not modeled, so very long prompts are underestimated.
 
-- Python 3.12+
-- textual, rich (installed automatically)
+## Documentation
+
+- [docs/specs/](docs/specs/README.md): how each log format is parsed and how each piece is rendered. These are kept in sync with the code.
+- [CONTRIBUTING.md](CONTRIBUTING.md): dev setup, tests, and the checklist for adding a new log format.
+- [SECURITY.md](SECURITY.md): threat model and how to report a vulnerability.
+- [Releases](https://github.com/glebmish/transcript/releases): changes in each version.
+
+## License
+
+[MIT](LICENSE).
+
+`transcript` is an independent project. It is not affiliated with or endorsed by Anthropic, Google or OpenAI. Claude, Gemini and Codex are named only to describe the log formats it reads.
