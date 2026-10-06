@@ -42,7 +42,7 @@ grep -n '48;2;51;51;51' capture.ansi | awk -F: '{print $1}'
 
 At `cell_w=10`, `cell_h=22`:
 
-```
+```text
 pixel_x = col * 10
 pixel_y = row * 22        # top edge of the cell; add cell_h for bottom
 ```
@@ -98,7 +98,7 @@ Pick `-fill none` so the content underneath stays visible; only the border draws
 
 For a left-pointing arrow ending at `(xtip, ytip)` with a 15 px head:
 
-```
+```text
 base1 = (xtip + 15, ytip - 9)
 base2 = (xtip + 15, ytip + 9)
 ```
@@ -151,7 +151,7 @@ magick in.png \
 
 When annotating an image produced by textimg (default 20 pt with JetBrainsMono Nerd Font), each terminal cell maps to roughly:
 
-```
+```text
 cell_w = image_width  / tmux_cols
 cell_h = image_height / tmux_rows
 ```
@@ -160,7 +160,7 @@ For a 120×40 pane that renders as 1200×880: `cell_w = 10 px`, `cell_h = 22 px`
 
 Then a TUI cell `(col, row)` occupies:
 
-```
+```text
 top-left     = (col * 10,       row * 22)
 bottom-right = ((col + 1) * 10, (row + 1) * 22)
 ```

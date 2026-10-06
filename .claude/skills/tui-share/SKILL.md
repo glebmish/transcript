@@ -130,7 +130,7 @@ SID_SHORT=${SID:0:8}                       # 01234567 — short folder segment
 
 Cloudinary `public_id`:
 
-```
+```text
 <YYYY-MM-DD>-<SID_SHORT>/<NNN>-<slug>
 ```
 
