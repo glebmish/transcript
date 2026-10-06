@@ -9,6 +9,10 @@ This parser supports native Claude Code JSONL logs.
 - File shape: JSONL, one JSON object per line
 - Detection signal: at least one valid JSONL entry with a known Claude Code `type`
 
+## Session Identity
+
+`Transcript.session_id` is the `sessionId` of the first entry that has one. Later entries are not checked for a different value. If no entry has `sessionId`, it is `None`.
+
 ## Native Entry Types
 
 | Native `type` | Common action | Presented? |

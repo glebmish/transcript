@@ -7,9 +7,25 @@ from transcript.parsers.gemini import parse as parse_gemini
 from transcript.renderers.markdown import render, RenderOptions
 
 
+_EPILOG = """\
+interactive viewer:
+  transcript view [options] input
+                        browse the transcript in a terminal UI instead of
+                        printing Markdown
+"""
+
+
 def main():
+    # Transcripts are full of non-ASCII (arrows, middle dots, user text); never
+    # let a non-UTF-8 locale turn that into a UnicodeEncodeError.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
-        description="Convert agent logs to readable Markdown transcripts."
+        prog="transcript",
+        description="Convert agent logs to readable Markdown transcripts.",
+        epilog=_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("input", nargs="?", help="Path to log file")
     parser.add_argument(
@@ -38,17 +54,20 @@ def main():
         sys.exit(1)
 
     try:
-        with open(args.input):
+        with open(args.input, encoding="utf-8"):
             pass
     except FileNotFoundError:
         print(f"Error: file not found: {args.input}", file=sys.stderr)
+        sys.exit(2)
+    except OSError as e:
+        print(f"Error: cannot read {args.input}: {e.strerror or e}", file=sys.stderr)
         sys.exit(2)
 
     fmt = args.format
     if not fmt:
         try:
             fmt = detect_format(args.input)
-        except (ValueError, RecursionError) as e:
+        except (ValueError, RecursionError, OSError) as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
 
@@ -79,8 +98,12 @@ def main():
     md = render(transcript, options)
 
     if args.output:
-        with open(args.output, "w") as f:
-            f.write(md)
+        try:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(md)
+        except OSError as e:
+            print(f"Error: cannot write {args.output}: {e.strerror or e}", file=sys.stderr)
+            sys.exit(1)
     elif args.pretty:
         from rich.console import Console
         from rich.markdown import Markdown

@@ -3,6 +3,7 @@ import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
+from transcript.sanitize import sanitize_text
 from transcript.parsers.common import as_dict, as_int, as_list, as_str, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
@@ -103,6 +104,20 @@ def _summary_from_display(display) -> str:
     return str(display)[:50]
 
 
+_NOTICE_TYPES = ("error", "warning")
+
+
+def _content_text(content) -> str:
+    """Stripped text of a message ``content`` that is a string or a list of parts."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return " ".join(
+            as_str(item.get("text")) for item in content if isinstance(item, dict)
+        ).strip()
+    return ""
+
+
 def _to_text(value) -> str:
     if isinstance(value, str):
         return value
@@ -140,7 +155,7 @@ def _extract_result(tc: dict) -> tuple[str, str, Status]:
 
 
 def parse(path: str) -> Transcript:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
         raise ValueError("expected a JSON object at the top level")
@@ -158,16 +173,20 @@ def parse(path: str) -> Transcript:
             continue
 
         if msg_type == "user":
-            content = entry.get("content")
-            text = ""
-            if isinstance(content, str):
-                text = content
-            elif isinstance(content, list):
-                text = " ".join(
-                    as_str(item.get("text")) for item in content if isinstance(item, dict)
-                )
-            if text.strip():
-                messages.append(Message(role=Role.USER, timestamp=ts, text=[text.strip()]))
+            text = _content_text(entry.get("content"))
+            if text:
+                messages.append(Message(role=Role.USER, timestamp=ts, text=[text]))
+
+        elif msg_type in _NOTICE_TYPES:
+            # Runtime errors and warnings are shown as system messages, labelled
+            # with their native type so they are distinguishable.
+            text = _content_text(entry.get("content"))
+            label = f"[{msg_type}]"
+            messages.append(Message(
+                role=Role.SYSTEM,
+                timestamp=ts,
+                text=[f"{label} {text}" if text else label],
+            ))
 
         elif msg_type == "gemini":
             tokens = as_dict(entry.get("tokens"))
@@ -218,6 +237,13 @@ def parse(path: str) -> Transcript:
                 ))
 
             messages.append(msg)
+
+        else:
+            print(
+                f"Warning: skipping unknown Gemini message type "
+                f"'{sanitize_text(str(msg_type))}' in message {entry_num}",
+                file=sys.stderr,
+            )
 
     return _build_transcript(messages, data)
 

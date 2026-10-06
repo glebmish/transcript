@@ -6,7 +6,7 @@ _CODEX_TYPES = {"session_meta", "turn_context", "response_item", "event_msg"}
 
 def detect_format(path: str) -> str:
     """Auto-detect log format. Returns 'claude', 'gemini', or 'codex'. Raises ValueError if unknown."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = f.read()
 
     # Try Gemini (single JSON with sessionId + messages)

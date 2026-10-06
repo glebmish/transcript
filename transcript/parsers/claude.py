@@ -168,8 +168,9 @@ def parse(path: str) -> Transcript:
     pending_tool_uses: dict[str, dict] = {}
     # Maps tool_use id -> index in content_order where ("tool", ?) will go
     pending_tool_order: dict[str, int] = {}
+    session_id: str | None = None
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line_num, line_str in enumerate(f, 1):
             line_str = line_str.strip()
             if not line_str:
@@ -182,6 +183,9 @@ def parse(path: str) -> Transcript:
             if not isinstance(entry, dict):
                 print(f"Warning: skipping non-object line {line_num}", file=sys.stderr)
                 continue
+
+            if session_id is None:
+                session_id = as_str(entry.get("sessionId")) or None
 
             entry_type = entry.get("type")
 
@@ -378,10 +382,10 @@ def parse(path: str) -> Transcript:
         _finalize_assistant(current_assistant)
         messages.append(current_assistant)
 
-    return _build_transcript(messages)
+    return _build_transcript(messages, session_id)
 
 
-def _build_transcript(messages: list[Message]) -> Transcript:
+def _build_transcript(messages: list[Message], session_id: str | None) -> Transcript:
     models: set[str] = set()
     total_in = total_out = 0
     passed = failed = cancelled = 0
@@ -423,7 +427,7 @@ def _build_transcript(messages: list[Message]) -> Transcript:
     return Transcript(
         messages=messages,
         source_format="claude",
-        session_id=None,
+        session_id=session_id,
         start_time=start,
         end_time=end,
         models=models,

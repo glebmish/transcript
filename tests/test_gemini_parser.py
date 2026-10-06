@@ -251,3 +251,25 @@ def test_null_tokens_gives_zero_counts(tmp_path):
     t = parse(str(p))
     msg = t.messages[0]
     assert (msg.tokens_in, msg.tokens_out, msg.tokens_cached, msg.tokens_thinking) == (0, 0, 0, 0)
+
+
+def test_error_and_warning_messages_become_system_messages(tmp_path, capsys):
+    p = tmp_path / "gemini_error_warning.json"
+    p.write_text(json.dumps({
+        "sessionId": "error-warning",
+        "messages": [
+            {"type": "user", "timestamp": "2026-01-01T10:00:00Z", "content": [{"text": "hi"}]},
+            {"type": "error", "timestamp": "2026-01-01T10:00:01Z", "content": "[API Error: quota exceeded]"},
+            {"type": "warning", "timestamp": "2026-01-01T10:00:02Z", "content": [{"text": "Context nearly full"}]},
+            {"type": "info", "timestamp": "2026-01-01T10:00:03Z", "content": "Request cancelled."},
+            {"type": "mystery", "timestamp": "2026-01-01T10:00:04Z", "content": "?"},
+        ],
+    }))
+
+    t = parse(str(p))
+    assert [m.role for m in t.messages] == [Role.USER, Role.SYSTEM, Role.SYSTEM]
+    assert t.messages[1].text == ["[error] [API Error: quota exceeded]"]
+    assert t.messages[2].text == ["[warning] Context nearly full"]
+    err = capsys.readouterr().err
+    assert "unknown Gemini message type 'mystery'" in err
+    assert "info" not in err

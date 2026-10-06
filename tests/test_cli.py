@@ -119,3 +119,47 @@ def test_stdout_has_no_terminal_escapes(tmp_path):
     r = _run("-o", str(out), str(log))
     assert r.returncode == 0
     assert "\x1b" not in out.read_text()
+
+
+def test_utf8_input_and_output_under_non_utf8_locale(tmp_path):
+    import json as _json
+    import os
+    text = "café → 日本"
+    log = tmp_path / "unicode.jsonl"
+    log.write_text(_json.dumps({
+        "type": "user", "timestamp": "2026-01-01T10:00:00Z",
+        "message": {"role": "user", "content": text},
+    }, ensure_ascii=False), encoding="utf-8")
+    env = {**os.environ, "PYTHONUTF8": "0", "LC_ALL": "en_US.ISO8859-1", "LANG": "en_US.ISO8859-1"}
+    env.pop("PYTHONIOENCODING", None)
+
+    r = subprocess.run([*CLI, str(log)], capture_output=True, env=env,
+                       cwd=str(Path(__file__).parent.parent))
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    assert text in r.stdout.decode("utf-8")
+
+    out = tmp_path / "out.md"
+    r = subprocess.run([*CLI, "-o", str(out), str(log)], capture_output=True, env=env,
+                       cwd=str(Path(__file__).parent.parent))
+    assert r.returncode == 0
+    assert text in out.read_text(encoding="utf-8")
+
+
+def test_directory_input_reports_clean_error(tmp_path):
+    r = _run(str(tmp_path))
+    assert r.returncode == 2
+    assert "Traceback" not in r.stderr
+    assert "Error" in r.stderr
+
+
+def test_unwritable_output_reports_clean_error(tmp_path):
+    r = _run("-o", str(tmp_path / "missing-dir" / "out.md"), CLAUDE_FIXTURE)
+    assert r.returncode == 1
+    assert "Traceback" not in r.stderr
+    assert "Error" in r.stderr
+
+
+def test_help_mentions_view_subcommand():
+    r = _run("--help")
+    assert r.returncode == 0
+    assert "transcript view" in r.stdout

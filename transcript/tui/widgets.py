@@ -2,7 +2,6 @@ import textwrap
 from textual.widgets import Static, Input
 from textual.containers import VerticalScroll, Horizontal
 from textual.content import Content
-from textual.markup import escape
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from transcript.model import Status, Role, Message, Transcript, ToolCall
@@ -80,7 +79,7 @@ class GutterRow(Horizontal):
 class MessageHeaderWidget(GutterRow):
     """A message header (User/Assistant) that can receive focus."""
 
-    def __init__(self, content: str, **kwargs):
+    def __init__(self, content: str | Content, **kwargs):
         super().__init__("  ", content, markup=True, **kwargs)
         self.styles.margin = (1, 0, 0, 0)
 
@@ -209,7 +208,7 @@ class ConversationPanel(VerticalScroll):
         else:
             cost_str = "$?"
 
-        model_str = escape(", ".join(sorted(t.models)) or "unknown")
+        model_str = ", ".join(sorted(t.models)) or "unknown"
         delta = t.end_time - t.start_time
         total_s = int(delta.total_seconds())
         if total_s >= 3600:
@@ -222,10 +221,15 @@ class ConversationPanel(VerticalScroll):
         user_c = sum(1 for m in t.messages if m.role == Role.USER and not m.is_compaction_marker and not m.command_name)
         asst_c = sum(1 for m in t.messages if m.role == Role.ASSISTANT)
 
-        header = (
-            f"  [bold]# Transcript[/bold]\n"
-            f"  [dim]Duration: {dur} \u00b7 {model_str}\n"
-            f"  Messages: {user_c + asst_c} \u00b7 Tools: {total_tools}{failed_str} \u00b7 {cost_str}[/dim]"
+        # Built with Content.assemble, not markup: model names come from the log.
+        header = Content.assemble(
+            ("  # Transcript", "bold"),
+            "\n",
+            (
+                f"  Duration: {dur} \u00b7 {model_str}\n"
+                f"  Messages: {user_c + asst_c} \u00b7 Tools: {total_tools}{failed_str} \u00b7 {cost_str}",
+                "dim",
+            ),
         )
         return Static(header)
 
@@ -247,8 +251,9 @@ class ConversationPanel(VerticalScroll):
         ts_str = msg.timestamp.strftime("%H:%M:%S")
 
         if msg.command_name:
-            cmd_label = f"'{escape(msg.command_name)}' command" if msg.command_name != "(command output)" else "command output"
-            yield MessageHeaderWidget(f"[bold green]## User ({cmd_label}) \u00b7 {ts_str}[/bold green]")
+            cmd_label = f"'{msg.command_name}' command" if msg.command_name != "(command output)" else "command output"
+            # Content.assemble, not markup: the command name comes from the log.
+            yield MessageHeaderWidget(Content.assemble((f"## User ({cmd_label}) \u00b7 {ts_str}", "bold green")))
             for t in msg.text:
                 dedented = "\n".join(line.strip() for line in t.splitlines())
                 yield MessageTextWidget(dedented, style="magenta")

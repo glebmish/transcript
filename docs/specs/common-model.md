@@ -70,7 +70,7 @@ class Transcript:
 
 `Transcript.source_format` is the native parser key, currently `claude`, `gemini`, or `codex`.
 
-`Transcript.session_id` is populated when the native format exposes a stable session identifier. Claude Code JSONL currently does not populate it.
+`Transcript.session_id` is populated when the native format exposes a stable session identifier: Gemini `sessionId`, Codex `session_meta.payload.id`, and the first Claude Code entry carrying `sessionId`.
 
 `Transcript.start_time` and `Transcript.end_time` are normalized `datetime` values. Missing timestamps use `datetime.min` with UTC timezone.
 

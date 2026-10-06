@@ -37,7 +37,12 @@ If `lastUpdated` is missing or invalid, use the last parsed message timestamp wh
 |---|---|---|
 | `user` | Create `Message(role=USER)` | yes |
 | `gemini` | Create `Message(role=ASSISTANT)` | yes |
+| `error` | Create `Message(role=SYSTEM)` with text `[error] <content>` | yes |
+| `warning` | Create `Message(role=SYSTEM)` with text `[warning] <content>` | yes |
 | `info` | Skip | no |
+| unknown | Skip with warning naming the type | no |
+
+`error` and `warning` content uses the same string-or-parts handling as user content. The native type is kept as a `[error]` / `[warning]` prefix so the two are distinguishable in every renderer; as system messages they are displayed but not counted as user or assistant turns.
 
 ## User Content Mapping
 

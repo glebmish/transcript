@@ -305,3 +305,20 @@ def test_genuine_slash_command_user_entries_still_detected(tmp_path):
     assert [m.command_name for m in t.messages] == [
         "/review", "/clear", "(command output)", "(command output)",
     ]
+
+
+def test_session_id_from_first_entry_with_session_id(tmp_path):
+    p = tmp_path / "session.jsonl"
+    p.write_text("\n".join(json.dumps(e) for e in [
+        {"type": "system", "subtype": "turn_duration", "timestamp": "2026-01-01T10:00:00Z"},
+        {"type": "user", "sessionId": "sess-123", "timestamp": "2026-01-01T10:00:00Z",
+         "message": {"role": "user", "content": "hi"}},
+        {"type": "user", "sessionId": "sess-other", "timestamp": "2026-01-01T10:00:01Z",
+         "message": {"role": "user", "content": "again"}},
+    ]))
+
+    assert parse(str(p)).session_id == "sess-123"
+
+
+def test_session_id_none_when_absent():
+    assert parse(FIXTURE).session_id is None

@@ -276,7 +276,7 @@ def parse(path: str) -> Transcript:
             status=updated_status,
         )
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line_num, line_str in enumerate(f, 1):
             line_str = line_str.strip()
             if not line_str:
