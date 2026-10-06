@@ -6,7 +6,7 @@ These specs are organized around a docs-first contract for adding and presenting
 
 1. `common-model.md` defines the normalized data model all parsers produce.
 2. `presentation.md` defines how each supported common log piece should be presented, independent of source agent and renderer.
-3. `agents/*.md` defines how each native agent log format maps into the common model.
+3. `agents/*.md` defines how each native agent log format maps into the common model. `agents/README.md` has the checklist for adding a new format.
 4. `renderers/*.md` defines how each output surface realizes the common presentation contract.
 
 ## Ownership Rules

@@ -1,3 +1,7 @@
+# Sources (prices checked 2026-10-06):
+#   https://platform.claude.com/docs/en/about-claude/pricing
+#   https://ai.google.dev/gemini-api/docs/pricing
+#
 # (input_price, output_price) per 1M tokens in USD, keyed by model-id prefix.
 #
 # A model id matches the LONGEST key it starts with, so dated ids such as

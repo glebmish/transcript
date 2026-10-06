@@ -119,7 +119,7 @@ Parsers should skip native internals only when the relevant agent mapping spec s
 
 ## Cost Contract
 
-Pricing is stored in `transcript/pricing.py` as input and output USD prices per 1M tokens, keyed by model-name prefix.
+Pricing is stored in `transcript/pricing.py` as input and output USD prices per 1M tokens, keyed by model-name prefix. The prices are a snapshot of the published Anthropic and Google rates as of 2026-10-06 (sources are listed at the top of that file) and are not updated automatically.
 
 A model name is priced by the longest key it starts with. This lets dated ids such as `claude-sonnet-4-5-20250929` resolve to `claude-sonnet-4-5`, and keeps a shorter key from capturing a longer, differently priced family (`gemini-2.5-flash` vs `gemini-2.5-flash-lite`, `claude-opus-5` vs `claude-opus-5-5`).
 
