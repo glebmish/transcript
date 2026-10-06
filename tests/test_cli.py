@@ -165,3 +165,11 @@ def test_help_mentions_view_subcommand():
     r = _run("--help")
     assert r.returncode == 0
     assert "transcript view" in r.stdout
+
+
+def test_version_flag_prints_installed_version():
+    from importlib.metadata import version
+
+    r = _run("--version")
+    assert r.returncode == 0
+    assert r.stdout.strip() == f"transcript {version('transcript')}"

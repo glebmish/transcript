@@ -1,5 +1,6 @@
 import sys
 import argparse
+from importlib.metadata import version
 from transcript.detect import detect_format
 from transcript.parsers.claude import parse as parse_claude
 from transcript.parsers.codex import parse as parse_codex
@@ -39,6 +40,7 @@ def main():
     parser.add_argument("--no-cost", action="store_true", help="Exclude cost/token info")
     parser.add_argument("--expand-tools", action="store_true", help="Show full tool output")
     parser.add_argument("--pretty", action="store_true", help="Render formatted output in terminal")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('transcript')}")
 
     # Handle 'view' subcommand
     argv = sys.argv[1:]
