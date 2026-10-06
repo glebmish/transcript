@@ -9,7 +9,7 @@ Turn a Claude Code, Gemini CLI or Codex session log into a readable Markdown tra
 Agent session logs are raw JSON or JSONL, with thinking, tool calls and tool output split across separate entries. `transcript` reassembles them into the conversation as it happened: every user message, thinking block, tool call with its result, token count and estimated cost. It is for people who use these agents and want to review, debug or share what a session actually did. Nothing is filtered out by default, and terminal control characters in the log are shown as visible symbols such as `␛`, never executed.
 
 ```bash
-pipx install git+https://github.com/glebmish/transcript@v0.1.0
+pipx install git+https://github.com/glebmish/transcript@v0.1.1
 transcript ~/.claude/projects/<project>/<session>.jsonl   # Markdown to stdout
 transcript view ~/.claude/projects/<project>/<session>.jsonl   # terminal UI
 ```
@@ -21,19 +21,19 @@ Requires Python 3.12+. Tested in CI on Linux and macOS; Windows is untested. `tr
 Install from the release tag:
 
 ```bash
-pipx install git+https://github.com/glebmish/transcript@v0.1.0
+pipx install git+https://github.com/glebmish/transcript@v0.1.1
 # or
-uv tool install git+https://github.com/glebmish/transcript@v0.1.0
+uv tool install git+https://github.com/glebmish/transcript@v0.1.1
 # or, inside a virtualenv
-pip install git+https://github.com/glebmish/transcript@v0.1.0
+pip install git+https://github.com/glebmish/transcript@v0.1.1
 ```
 
-Or install the wheel attached to the [GitHub release](https://github.com/glebmish/transcript/releases/tag/v0.1.0):
+Or install the wheel attached to the [GitHub release](https://github.com/glebmish/transcript/releases/tag/v0.1.1):
 
 ```bash
-pipx install https://github.com/glebmish/transcript/releases/download/v0.1.0/transcript-0.1.0-py3-none-any.whl
+pipx install https://github.com/glebmish/transcript/releases/download/v0.1.1/transcript-0.1.1-py3-none-any.whl
 # or
-uv tool install https://github.com/glebmish/transcript/releases/download/v0.1.0/transcript-0.1.0-py3-none-any.whl
+uv tool install https://github.com/glebmish/transcript/releases/download/v0.1.1/transcript-0.1.1-py3-none-any.whl
 ```
 
 If pipx's default Python is older than 3.12, add `--python python3.12`. To work from a checkout, see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -42,7 +42,7 @@ Check the install:
 
 ```console
 $ transcript --version
-transcript 0.1.0
+transcript 0.1.1
 ```
 
 ## Markdown output

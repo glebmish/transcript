@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "transcript"
-version = "0.1.0"
+version = "0.1.1"
 description = "Convert Claude Code, Gemini CLI and Codex conversation logs into readable Markdown transcripts, or browse them in a terminal UI."
 readme = "README.md"
 license = "MIT"
