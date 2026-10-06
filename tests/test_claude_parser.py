@@ -322,3 +322,67 @@ def test_session_id_from_first_entry_with_session_id(tmp_path):
 
 def test_session_id_none_when_absent():
     assert parse(FIXTURE).session_id is None
+
+
+def _write_jsonl(path, entries):
+    path.write_text("\n".join(json.dumps(e) for e in entries))
+    return str(path)
+
+
+_PENDING_TOOL_ASSISTANT = {
+    "type": "assistant", "timestamp": "2026-01-01T10:00:01Z", "message": {
+        "id": "msg_A", "role": "assistant", "model": "claude-sonnet-4-6",
+        "content": [{"type": "tool_use", "id": "tu_open", "name": "Bash",
+                     "input": {"command": "sleep 100", "description": "Wait"}}],
+        "usage": {"input_tokens": 10, "output_tokens": 5},
+    },
+}
+
+
+def _assert_one_unresolved_tool(t):
+    assistants = [m for m in t.messages if m.role == Role.ASSISTANT]
+    assert len(assistants) == 1
+    calls = assistants[0].tool_calls
+    assert len(calls) == 1
+    assert calls[0].status == Status.FAILED
+    assert calls[0].result_summary == "no result"
+    assert calls[0].summary == "Wait"
+    assert assistants[0].content_order == [("tool", 0)]
+    assert t.tool_stats.failed == 1
+
+
+def test_unresolved_tool_use_kept_when_user_text_follows(tmp_path):
+    t = parse(_write_jsonl(tmp_path / "interrupt.jsonl", [
+        {"type": "user", "timestamp": "2026-01-01T10:00:00Z", "message": {"role": "user", "content": "go"}},
+        _PENDING_TOOL_ASSISTANT,
+        {"type": "user", "timestamp": "2026-01-01T10:00:02Z", "message": {"role": "user", "content": "stop"}},
+    ]))
+    _assert_one_unresolved_tool(t)
+
+
+def test_unresolved_tool_use_kept_when_compact_boundary_follows(tmp_path):
+    t = parse(_write_jsonl(tmp_path / "compact.jsonl", [
+        _PENDING_TOOL_ASSISTANT,
+        {"type": "system", "subtype": "compact_boundary", "timestamp": "2026-01-01T10:00:02Z"},
+    ]))
+    _assert_one_unresolved_tool(t)
+
+
+def test_unresolved_tool_use_kept_when_local_command_follows(tmp_path):
+    t = parse(_write_jsonl(tmp_path / "local.jsonl", [
+        _PENDING_TOOL_ASSISTANT,
+        {"type": "system", "subtype": "local_command", "timestamp": "2026-01-01T10:00:02Z",
+         "content": "<command-name>/clear</command-name>"},
+    ]))
+    _assert_one_unresolved_tool(t)
+
+
+def test_local_command_without_command_name_kept_as_command_output(tmp_path):
+    raw = "<local-command-stdout>Set model to opus</local-command-stdout>"
+    t = parse(_write_jsonl(tmp_path / "stdout_only.jsonl", [
+        {"type": "system", "subtype": "local_command", "timestamp": "2026-01-01T10:00:00Z", "content": raw},
+    ]))
+    assert len(t.messages) == 1
+    assert t.messages[0].role == Role.USER
+    assert t.messages[0].command_name == "(command output)"
+    assert t.messages[0].text == [raw]

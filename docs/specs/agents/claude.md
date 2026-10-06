@@ -39,7 +39,7 @@ Unknown entry types are skipped silently for forward compatibility.
 | Subtype | Common action | Reason |
 |---|---|---|
 | `compact_boundary` | Insert `Message(is_compaction_marker=True)` | Shows context compaction point |
-| `local_command` | Create message with `command_name` when command name exists | Shows slash-command activity |
+| `local_command` | Create message with `command_name`; `"(command output)"` when the content has no `<command-name>` | Shows slash-command activity |
 | `api_error` | Skip | Transient retry metadata |
 | `turn_duration` | Skip | Runtime timing metadata |
 | `bridge_status` | Skip | Remote-control status metadata |
@@ -65,7 +65,7 @@ If the text starts with `<local-command-caveat>` or `<local-command-stdout>` (or
 
 Messages with `command_name` are displayed but are not counted as user messages.
 
-For `system` entries with `subtype: "local_command"`, preserve the raw `content` string in `Message.text` and store the extracted command in `Message.command_name`.
+For `system` entries with `subtype: "local_command"`, preserve the raw `content` string in `Message.text` and store the extracted command in `Message.command_name`. When the content has no `<command-name>` (for example only `<local-command-stdout>...`), `command_name` is `"(command output)"`, as for user text. Entries with empty or whitespace-only content are skipped.
 
 User `image` content blocks are represented as text placeholders such as `[image: base64]`. The current common model does not carry binary media or image source payloads.
 
@@ -82,6 +82,8 @@ Claude assistant entries use `message.content[]`.
 Assistant entries with the same `message.id` are streaming fragments of the same assistant message. The parser merges their content and uses max token counts for that message ID.
 
 When a new `message.id` appears, the previous assistant message is finalized and a new `Message` is started.
+
+Assistant entries without `message.id` are merged into the current assistant message (or start one if none is open). Their `usage` is ignored, and their `model` is only used when they start a new message.
 
 Claude Code writes `model: "<synthetic>"` on placeholder assistant entries it generates locally (interrupts, API errors). These are kept as normal assistant messages with `Message.model = "<synthetic>"`, but they are not added to `Transcript.models` and are skipped for cost estimation, since no API call was made.
 
@@ -102,6 +104,8 @@ Unresolved tool uses become failed tool calls:
 ```python
 ToolCall(result_summary="no result", result_full="", status=Status.FAILED)
 ```
+
+They are recorded on the assistant message that emitted them whenever that message is closed: by a new `message.id`, a user text entry, a `compact_boundary`, a kept `local_command`, or end of file. A `tool_result` that arrives after its assistant message was closed is dropped; the call stays `no result`.
 
 ## Tool Fields
 
@@ -138,7 +142,7 @@ From root-level `toolUseResult`:
 | `url` with `code` | `HTTP {code}` |
 | `exitCode != 0` | `FAILED (exit N)` |
 | `exitCode == 0` | `ok` |
-| string result | `FAILED: <first line>` |
+| string result | `FAILED: <first line, max 50 chars>` |
 | missing/unknown | `ok` |
 
 If `tool_result.is_error` is true, status is `FAILED` and the result summary must be failure-coded.

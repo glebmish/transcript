@@ -52,7 +52,7 @@ Assistant messages render as:
 ## Assistant · YYYY-MM-DD HH:MM:SS · ↑in ↓out · $cost
 ```
 
-Token and cost suffixes are hidden when `show_cost` is false.
+Token and cost suffixes are hidden when `show_cost` is false. The `· $cost` segment is also omitted for messages without a real model (no model, or Claude Code's `<synthetic>` placeholder), since no API call was priced.
 
 ## Content Ordering
 

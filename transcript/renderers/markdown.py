@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from transcript.model import Status, Role, Message, ToolCall, Transcript
+from transcript.parsers.common import is_real_model
 from transcript.pricing import estimate_cost
 from transcript.sanitize import sanitize_text
 
@@ -136,11 +137,12 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
         if m.role == Role.ASSISTANT:
             header = f"## Assistant \u00b7 {_fmt_ts(m.timestamp)}"
             if opts.show_cost:
-                msg_cost = estimate_cost(m.model or "", m.tokens_in, m.tokens_out, m.tokens_cached)
-                header += (
-                    f" \u00b7 \u2191{_fmt_tokens(m.tokens_in)} \u2193{_fmt_tokens(m.tokens_out)}"
-                    f" \u00b7 {_fmt_cost(msg_cost)}"
-                )
+                header += f" \u00b7 \u2191{_fmt_tokens(m.tokens_in)} \u2193{_fmt_tokens(m.tokens_out)}"
+                # Placeholder models such as <synthetic> made no API call:
+                # no cost, rather than an unknown "$?".
+                if is_real_model(m.model):
+                    msg_cost = estimate_cost(m.model, m.tokens_in, m.tokens_out, m.tokens_cached)
+                    header += f" \u00b7 {_fmt_cost(msg_cost)}"
             lines.append(header)
         else:
             lines.append(f"## {_role_label(m.role)} \u00b7 {_fmt_ts(m.timestamp)}")

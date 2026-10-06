@@ -178,3 +178,21 @@ def test_compact_batch_fence_longer_than_backticks():
                   result_summary="ok", result_full="", status=Status.PASSED)
     md = render(_make_transcript([_tool_msg(tc, ordered=False)]))
     assert "````\nBash: cat ``` → ok\n````" in md
+
+
+def test_synthetic_assistant_header_has_no_cost():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="<synthetic>", text=["API Error"]),
+    ], models=set(), total_cost=None)
+    header = next(line for line in render(t).splitlines() if line.startswith("## Assistant"))
+    assert header == "## Assistant · 2026-01-01 10:00:00 · ↑0 ↓0"
+    assert "$" not in header
+
+
+def test_real_model_assistant_header_keeps_cost():
+    t = _make_transcript([
+        Message(role=Role.ASSISTANT, timestamp=TS1, model="claude-opus-4-6",
+                tokens_in=1000, tokens_out=100, text=["hi"]),
+    ])
+    header = next(line for line in render(t).splitlines() if line.startswith("## Assistant"))
+    assert header.endswith("· $0.0075")

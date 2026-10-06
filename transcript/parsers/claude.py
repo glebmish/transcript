@@ -161,6 +161,23 @@ def _flush_pending_tool_uses(
             msg.content_order[order_pos] = ("tool", tool_idx)
 
 
+def _close_assistant(
+    msg: Message,
+    pending_tool_uses: dict[str, dict],
+    pending_tool_order: dict[str, int],
+    messages: list[Message],
+) -> None:
+    """Finish the open assistant message: record unanswered tool_uses as FAILED
+    "no result" calls, drop leftover placeholders, and append it to messages.
+
+    Every place that closes the current assistant must go through here, or
+    unanswered tool calls silently disappear.
+    """
+    _flush_pending_tool_uses(msg, pending_tool_uses, pending_tool_order)
+    _finalize_assistant(msg)
+    messages.append(msg)
+
+
 def parse(path: str) -> Transcript:
     messages: list[Message] = []
     current_assistant: Message | None = None
@@ -193,8 +210,7 @@ def parse(path: str) -> Transcript:
                 subtype = entry.get("subtype", "")
                 if subtype == "compact_boundary":
                     if current_assistant:
-                        _finalize_assistant(current_assistant)
-                        messages.append(current_assistant)
+                        _close_assistant(current_assistant, pending_tool_uses, pending_tool_order, messages)
                         current_assistant = None
                         current_msg_id = None
                         pending_tool_uses = {}
@@ -207,11 +223,9 @@ def parse(path: str) -> Transcript:
                     ))
                 elif subtype == "local_command":
                     raw_content = as_str(entry.get("content"))
-                    cmd_name = _extract_command_name(raw_content)
-                    if cmd_name:
+                    if raw_content.strip():
                         if current_assistant:
-                            _finalize_assistant(current_assistant)
-                            messages.append(current_assistant)
+                            _close_assistant(current_assistant, pending_tool_uses, pending_tool_order, messages)
                             current_assistant = None
                             current_msg_id = None
                             pending_tool_uses = {}
@@ -219,8 +233,9 @@ def parse(path: str) -> Transcript:
                         messages.append(Message(
                             role=Role.USER,
                             timestamp=_parse_ts(entry.get("timestamp", "")),
-                            command_name=cmd_name,
-                            text=[raw_content or cmd_name],
+                            # Output-only entries (no <command-name>) are kept too.
+                            command_name=_extract_command_name(raw_content) or "(command output)",
+                            text=[raw_content],
                         ))
                 elif subtype not in (
                     "api_error",
@@ -279,8 +294,7 @@ def parse(path: str) -> Transcript:
 
                 # Actual user message
                 if current_assistant:
-                    _finalize_assistant(current_assistant)
-                    messages.append(current_assistant)
+                    _close_assistant(current_assistant, pending_tool_uses, pending_tool_order, messages)
                     current_assistant = None
                     current_msg_id = None
                     pending_tool_uses = {}
@@ -321,9 +335,7 @@ def parse(path: str) -> Transcript:
                 # Distinct msg_ids are separate assistant turns: sum across them.
                 if current_assistant is None or (msg_id and msg_id != current_msg_id):
                     if current_assistant is not None:
-                        _flush_pending_tool_uses(current_assistant, pending_tool_uses, pending_tool_order)
-                        _finalize_assistant(current_assistant)
-                        messages.append(current_assistant)
+                        _close_assistant(current_assistant, pending_tool_uses, pending_tool_order, messages)
                     pending_tool_uses = {}
                     pending_tool_order = {}
                     current_assistant = Message(role=Role.ASSISTANT, timestamp=ts, model=model)
@@ -378,9 +390,7 @@ def parse(path: str) -> Transcript:
                             current_assistant.content_order.append(("tool", -1))
 
     if current_assistant:
-        _flush_pending_tool_uses(current_assistant, pending_tool_uses, pending_tool_order)
-        _finalize_assistant(current_assistant)
-        messages.append(current_assistant)
+        _close_assistant(current_assistant, pending_tool_uses, pending_tool_order, messages)
 
     return _build_transcript(messages, session_id)
 
