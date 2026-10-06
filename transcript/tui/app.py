@@ -16,6 +16,7 @@ _BLOCK_SELECTOR = "GutterRow"
 
 
 class TranscriptApp(App):
+    TITLE = "transcript"
     CSS = """
     #main-split { height: 1fr; }
     ConversationPanel { width: 2fr; overflow-y: auto; border: solid dimgray; }

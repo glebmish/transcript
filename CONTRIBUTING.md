@@ -25,4 +25,5 @@ Run the tool from the checkout with `.venv/bin/transcript <logfile>` or `.venv/b
 
 - Adding a new agent log format: the checklist in `docs/specs/agents/README.md`.
 - Checking the TUI in a real terminal: `docs/validation/tui-smoke-test.md`.
+- Regenerating the README screenshot after a visible TUI change: `.venv/bin/python scripts/tui_screenshot.py` (writes `docs/images/tui.svg`).
 - The `.claude/skills/` and `.agents/skills/` trees are optional maintainer tooling for coding agents; see "Agent skill trees" in `CLAUDE.md`. You don't need them to build, test or use the tool.

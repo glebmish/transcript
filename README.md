@@ -8,8 +8,10 @@ Turn a Claude Code, Gemini CLI or Codex session log into a readable Markdown tra
 
 Agent session logs are raw JSON or JSONL, with thinking, tool calls and tool output split across separate entries. `transcript` reassembles them into the conversation as it happened: every user message, thinking block, tool call with its result, token count and estimated cost. It is for people who use these agents and want to review, debug or share what a session actually did. Nothing is filtered out by default, and terminal control characters in the log are shown as visible symbols such as `␛`, never executed.
 
+![transcript view: a Claude Code session with a failed Bash call opened in the detail panel](docs/images/tui.svg)
+
 ```bash
-pipx install git+https://github.com/glebmish/transcript@v0.1.1
+pipx install git+https://github.com/glebmish/transcript@v0.1.2
 transcript ~/.claude/projects/<project>/<session>.jsonl   # Markdown to stdout
 transcript view ~/.claude/projects/<project>/<session>.jsonl   # terminal UI
 ```
@@ -21,19 +23,19 @@ Requires Python 3.12+. Tested in CI on Linux and macOS; Windows is untested. `tr
 Install from the release tag:
 
 ```bash
-pipx install git+https://github.com/glebmish/transcript@v0.1.1
+pipx install git+https://github.com/glebmish/transcript@v0.1.2
 # or
-uv tool install git+https://github.com/glebmish/transcript@v0.1.1
+uv tool install git+https://github.com/glebmish/transcript@v0.1.2
 # or, inside a virtualenv
-pip install git+https://github.com/glebmish/transcript@v0.1.1
+pip install git+https://github.com/glebmish/transcript@v0.1.2
 ```
 
-Or install the wheel attached to the [GitHub release](https://github.com/glebmish/transcript/releases/tag/v0.1.1):
+Or install the wheel attached to the [GitHub release](https://github.com/glebmish/transcript/releases/tag/v0.1.2):
 
 ```bash
-pipx install https://github.com/glebmish/transcript/releases/download/v0.1.1/transcript-0.1.1-py3-none-any.whl
+pipx install https://github.com/glebmish/transcript/releases/download/v0.1.2/transcript-0.1.2-py3-none-any.whl
 # or
-uv tool install https://github.com/glebmish/transcript/releases/download/v0.1.1/transcript-0.1.1-py3-none-any.whl
+uv tool install https://github.com/glebmish/transcript/releases/download/v0.1.2/transcript-0.1.2-py3-none-any.whl
 ```
 
 If pipx's default Python is older than 3.12, add `--python python3.12`. To work from a checkout, see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -42,7 +44,7 @@ Check the install:
 
 ```console
 $ transcript --version
-transcript 0.1.1
+transcript 0.1.2
 ```
 
 ## Markdown output
@@ -138,32 +140,7 @@ The `--no-*` flags remove content but keep the structure: every message heading 
 transcript view session.jsonl
 ```
 
-`view` accepts the same `--format` option. The conversation is on the left; press Enter on a tool call to open it in the detail panel on the right. Here the failed `Bash` call is selected:
-
-```
-┌────────────────────────────────────────────────────────────────┐┌────────────────────────────────┐
-│  # Transcript                                                  ││Bash: Run tests                 │
-│  Duration: 2m 5s · claude-opus-4-6                             ││FAILED (exit 1)                 │
-│  Messages: 4 · Tools: 2 (1 x) · $0.04                          ││FAILED test_auth.py::test_jwt   │
-│                                                                ││AssertionError: expected 200 got│
-│  ## User · 10:00:00                                            ││401                             │
-│  Help me refactor auth                                         ││                                │
-│                                                                ││                                │
-│  ## Assistant · 10:00:05 · ↑10,000 ↓500                        ││                                │
-││ Thinking (1 line)  [>]                                        ││                                │
-│  I'll read the middleware.                                     ││                                │
-││ Read /src/auth.py → 84 lines  [>]                             ││                                │
-│  ─── conversation compacted ───                                ││                                │
-│                                                                ││                                │
-│  ## User · 10:02:00                                            ││                                │
-│  Focus on JWT validation                                       ││                                │
-│                                                                ││                                │
-│  ## Assistant · 10:02:05 · ↑12,000 ↓300                        ││                                │
-│  I'll look at JWT handling.                                    ││                                │
-│▶✘Bash Run tests → FAILED (exit 1)  [>]                         ││                                │
-└────────────────────────────────────────────────────────────────┘└────────────────────────────────┘
- tab Panel: right  q Quit  t Thinking  h Show: all  / Search  ? Help                    ▏^p palette
-```
+`view` accepts the same `--format` option. The conversation is on the left; press Enter on a tool call to open it in the detail panel on the right. The screenshot at the top of this page shows the failed `Bash` call opened this way.
 
 | Key | Action |
 |-----|--------|

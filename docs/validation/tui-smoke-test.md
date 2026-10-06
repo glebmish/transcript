@@ -66,7 +66,7 @@ borders
 
 Expected:
 
-- The title bar reads `TranscriptApp`.
+- The title bar reads `transcript`.
 - The left panel starts with `# Transcript`, `Duration: 2m 5s · claude-opus-4-6` and `Messages: 4 · Tools: 2 (1 x) · $0.04`.
 - Row 1 is focused: `▶ ## User · 10:00:00`.
 - The right panel reads `Select a tool call or thinking block and press Enter to view details`.

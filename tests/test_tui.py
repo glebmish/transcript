@@ -242,3 +242,7 @@ def test_summary_shows_cancelled_tool_count():
     line = asyncio.run(run(no_cancel))
     assert "Tools: 3 (1 x)" in line
     assert "cancelled" not in line
+
+
+def test_app_title_is_tool_name():
+    assert TranscriptApp.TITLE == "transcript"

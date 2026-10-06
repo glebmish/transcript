@@ -18,7 +18,7 @@ Log-derived strings are never interpreted as Textual markup. They are passed as 
 
 ## Layout
 
-The TUI uses two panels:
+The header bar shows the app title `transcript`. Below it, the TUI uses two panels:
 
 - conversation panel on the left
 - detail panel on the right
