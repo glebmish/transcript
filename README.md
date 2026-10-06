@@ -65,7 +65,7 @@ Output for the test fixture `tests/fixtures/claude_minimal.jsonl`:
 - **Model(s)**: claude-opus-4-6
 - **Messages**: 4 (2 user, 2 assistant)
 - **Tool calls**: 2 (1 passed, 1 failed)
-- **Tokens**: ↑22,000 ↓800 · $0.04
+- **Tokens**: ↑22,000 ↓800 · $0.05
 
 ---
 
@@ -76,7 +76,7 @@ Help me refactor auth
 
 ---
 
-## Assistant · 2026-01-01 10:00:05 · ↑10,000 ↓500 · $0.02
+## Assistant · 2026-01-01 10:00:05 · ↑10,000 ↓500 · $0.03
 
 > Let me look at auth code.
 
@@ -96,7 +96,7 @@ Focus on JWT validation
 
 ---
 
-## Assistant · 2026-01-01 10:02:05 · ↑12,000 ↓300 · $0.02
+## Assistant · 2026-01-01 10:02:05 · ↑12,000 ↓300 · $0.03
 
 I'll look at JWT handling.
 
@@ -190,29 +190,29 @@ The format is auto-detected. Use `--format claude`, `--format gemini` or `--form
 
 ## Cost estimation
 
-Costs are estimates from a built-in price table (USD per 1M tokens, prices checked 2026-10-06). Cache reads and cache writes are treated as free; only uncached input tokens and output tokens are billed, so real bills that include cache pricing will be somewhat higher.
+Costs are estimates from a built-in price table (USD per 1M tokens, prices checked 2026-10-06). Cache tokens are priced the way each provider bills them. For Anthropic models, cache writes cost 1.25× the input price with the 5-minute TTL and 2× with the 1-hour TTL, and cache reads cost 0.1× input, except the lower read rates for `claude-fable-5-1` and `claude-opus-5-5` shown below. Gemini 2.5 bills cached input at 0.1× input and has no cache-write charge, because Gemini CLI relies on implicit caching.
 
-| Model | Input | Output |
-|-------|------:|-------:|
-| claude-fable-5-1 | $10.00 | $50.00 |
-| claude-fable-5 | $10.00 | $50.00 |
-| claude-opus-5-5 | $4.00 | $20.00 |
-| claude-opus-5 | $5.00 | $25.00 |
-| claude-opus-4-8 | $5.00 | $25.00 |
-| claude-opus-4-7 | $5.00 | $25.00 |
-| claude-opus-4-6 | $5.00 | $25.00 |
-| claude-opus-4-5 | $5.00 | $25.00 |
-| claude-opus-4-1 | $15.00 | $75.00 |
-| claude-opus-4-0 (`claude-opus-4-20250514`) | $15.00 | $75.00 |
-| claude-sonnet-5-5 | $2.00 | $10.00 |
-| claude-sonnet-5 | $2.00 | $10.00 |
-| claude-sonnet-4-6 | $3.00 | $15.00 |
-| claude-sonnet-4-5 | $3.00 | $15.00 |
-| claude-sonnet-4-0 (`claude-sonnet-4-20250514`) | $3.00 | $15.00 |
-| claude-haiku-4-5 | $1.00 | $5.00 |
-| gemini-2.5-pro | $1.25 | $10.00 |
-| gemini-2.5-flash | $0.30 | $2.50 |
-| gemini-2.5-flash-lite | $0.10 | $0.40 |
+| Model | Input | Output | Cache read | Cache write (5m) | Cache write (1h) |
+|-------|------:|-------:|-----------:|-----------------:|-----------------:|
+| claude-fable-5-1 | $10.00 | $50.00 | $0.25 | $12.50 | $20.00 |
+| claude-fable-5 | $10.00 | $50.00 | $1.00 | $12.50 | $20.00 |
+| claude-opus-5-5 | $4.00 | $20.00 | $0.20 | $5.00 | $8.00 |
+| claude-opus-5 | $5.00 | $25.00 | $0.50 | $6.25 | $10.00 |
+| claude-opus-4-8 | $5.00 | $25.00 | $0.50 | $6.25 | $10.00 |
+| claude-opus-4-7 | $5.00 | $25.00 | $0.50 | $6.25 | $10.00 |
+| claude-opus-4-6 | $5.00 | $25.00 | $0.50 | $6.25 | $10.00 |
+| claude-opus-4-5 | $5.00 | $25.00 | $0.50 | $6.25 | $10.00 |
+| claude-opus-4-1 | $15.00 | $75.00 | $1.50 | $18.75 | $30.00 |
+| claude-opus-4-0 (`claude-opus-4-20250514`) | $15.00 | $75.00 | $1.50 | $18.75 | $30.00 |
+| claude-sonnet-5-5 | $2.00 | $10.00 | $0.20 | $2.50 | $4.00 |
+| claude-sonnet-5 | $2.00 | $10.00 | $0.20 | $2.50 | $4.00 |
+| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30 | $3.75 | $6.00 |
+| claude-sonnet-4-5 | $3.00 | $15.00 | $0.30 | $3.75 | $6.00 |
+| claude-sonnet-4-0 (`claude-sonnet-4-20250514`) | $3.00 | $15.00 | $0.30 | $3.75 | $6.00 |
+| claude-haiku-4-5 | $1.00 | $5.00 | $0.10 | $1.25 | $2.00 |
+| gemini-2.5-pro | $1.25 | $10.00 | $0.125 | — | — |
+| gemini-2.5-flash | $0.30 | $2.50 | $0.03 | — | — |
+| gemini-2.5-flash-lite | $0.10 | $0.40 | $0.01 | — | — |
 
 A model id uses the longest table entry it starts with, so `claude-sonnet-4-5-20250929` gets the `claude-sonnet-4-5` price, and `gemini-2.5-flash-lite` is not priced as `gemini-2.5-flash`.
 
@@ -224,6 +224,7 @@ Models not in the table show cost as `$?`, or as `(partial)` when only some mess
 - The three log formats are undocumented internals of each agent. A new agent version can change them, and `transcript` will lag until its parser is updated.
 - Prices are a static table. They are not fetched, and new models show `$?` until the table is updated.
 - `gemini-2.5-pro` is priced at the tier for prompts up to 200k tokens; the higher long-prompt tier is not modeled, so very long prompts are underestimated.
+- Gemini explicit-cache storage fees are not modeled. Gemini CLI logs only show implicit caching.
 
 ## Documentation
 
