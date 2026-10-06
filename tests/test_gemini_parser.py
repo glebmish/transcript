@@ -155,3 +155,70 @@ def test_structured_result_display_dict(tmp_path):
     tc = t.messages[0].tool_calls[0]
     assert tc.result_summary == "done"
     assert tc.result_full == "full result"
+
+
+def test_null_and_wrong_type_nested_fields_do_not_abort(tmp_path, capsys):
+    p = tmp_path / "gemini_nulls.json"
+    p.write_text(json.dumps({
+        "sessionId": "nulls",
+        "startTime": "2026-01-01T10:00:00Z",
+        "lastUpdated": "2026-01-01T10:00:05Z",
+        "messages": [
+            [1, 2],
+            {"type": "user", "timestamp": "2026-01-01T10:00:00Z", "content": None},
+            {"type": "user", "timestamp": "2026-01-01T10:00:01Z", "content": [{"text": None}, {"text": "hello"}]},
+            {
+                "type": "gemini",
+                "timestamp": "2026-01-01T10:00:02Z",
+                "model": "gemini-2.5-flash",
+                "content": None,
+                "tokens": None,
+                "thoughts": None,
+                "toolCalls": None,
+            },
+            {
+                "type": "gemini",
+                "timestamp": "2026-01-01T10:00:03Z",
+                "model": "gemini-2.5-flash",
+                "content": "answer",
+                "tokens": {"input": None, "output": "3", "cached": [], "thoughts": None},
+                "thoughts": [None, {"description": None}, {"description": "think"}],
+                "toolCalls": [
+                    None,
+                    {"name": "read_file", "args": None, "result": [{"functionResponse": None}], "status": None},
+                    {"name": "run_shell_command", "args": {"command": None},
+                     "result": [{"functionResponse": {"response": None}}]},
+                ],
+            },
+        ],
+    }))
+
+    t = parse(str(p))
+    assert len(t.messages) == 3
+    assert t.messages[0].text == ["hello"]
+    first, second = t.messages[1], t.messages[2]
+    assert first.tokens_in == 0
+    assert first.tool_calls == []
+    assert second.tokens_in == 0
+    assert second.tokens_out == 0
+    assert second.thinking == ["think"]
+    assert [tc.name for tc in second.tool_calls] == ["read_file", "run_shell_command"]
+    assert "skipping non-object message 1" in capsys.readouterr().err
+
+
+def test_null_tokens_gives_zero_counts(tmp_path):
+    p = tmp_path / "gemini_null_tokens.json"
+    p.write_text(json.dumps({
+        "sessionId": "null-tokens",
+        "messages": [{
+            "type": "gemini",
+            "timestamp": "2026-01-01T10:00:02Z",
+            "model": "gemini-2.5-flash",
+            "content": "hi",
+            "tokens": None,
+        }],
+    }))
+
+    t = parse(str(p))
+    msg = t.messages[0]
+    assert (msg.tokens_in, msg.tokens_out, msg.tokens_cached, msg.tokens_thinking) == (0, 0, 0, 0)

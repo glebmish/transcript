@@ -188,6 +188,9 @@ Tool-use blocks reserve a placeholder until the matching result arrives. Rendere
 ## Edge Cases
 
 - Malformed JSONL lines: skip with warning including line number.
+- Valid JSON lines that are not objects (for example `[1,2]`): skip with warning including line number.
+- Null or wrong-typed nested fields (`message`, `usage`, `content`, block `text`/`thinking`, tool `input`, numeric usage counts): treat as missing or 0; never abort the parse.
+- Non-string `tool_result.content` other than a block list is preserved as pretty-printed JSON.
 - Missing timestamp: use UTC `datetime.min`.
 - Missing usage: token counts default to 0.
 - Multiple `tool_result` blocks in one user entry: process all blocks.

@@ -117,3 +117,50 @@ def test_unresolved_tool_is_failed(tmp_path):
     tc = t.messages[1].tool_calls[0]
     assert tc.result_summary == "no result"
     assert tc.status == Status.FAILED
+
+
+def _write_jsonl(path, entries):
+    path.write_text("\n".join(e if isinstance(e, str) else json.dumps(e) for e in entries))
+
+
+def test_token_count_with_null_info_does_not_crash(tmp_path):
+    p = tmp_path / "codex_null_info.jsonl"
+    _write_jsonl(p, [
+        {"timestamp": "2026-01-01T10:00:00Z", "type": "session_meta", "payload": {"id": "s1"}},
+        {"timestamp": "2026-01-01T10:00:01Z", "type": "turn_context", "payload": {"model": "gpt-5.5"}},
+        {"timestamp": "2026-01-01T10:00:02Z", "type": "response_item",
+         "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "hi"}]}},
+        {"timestamp": "2026-01-01T10:00:03Z", "type": "event_msg", "payload": {"type": "token_count", "info": None}},
+        {"timestamp": "2026-01-01T10:00:04Z", "type": "event_msg",
+         "payload": {"type": "token_count", "info": {"last_token_usage": None}}},
+        {"timestamp": "2026-01-01T10:00:05Z", "type": "event_msg",
+         "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": None, "output_tokens": 4}}}},
+    ])
+
+    t = parse(str(p))
+    assert len(t.messages) == 1
+    assert t.messages[0].text == ["hi"]
+    assert t.messages[0].tokens_in == 0
+    assert t.messages[0].tokens_out == 4
+
+
+def test_non_dict_line_and_wrong_types_do_not_abort(tmp_path, capsys):
+    p = tmp_path / "codex_wrong_types.jsonl"
+    _write_jsonl(p, [
+        "[1,2]",
+        {"timestamp": "2026-01-01T10:00:00Z", "type": "session_meta", "payload": {"id": "s1"}},
+        {"timestamp": "2026-01-01T10:00:01Z", "type": "turn_context", "payload": {"model": ["not", "a", "string"]}},
+        {"timestamp": "2026-01-01T10:00:02Z", "type": "response_item", "payload": None},
+        {"timestamp": "2026-01-01T10:00:03Z", "type": "response_item",
+         "payload": {"type": "function_call", "name": "exec_command", "call_id": "c1",
+                     "arguments": json.dumps({"cmd": ["ls", "-la"]})}},
+        {"timestamp": "2026-01-01T10:00:04Z", "type": "response_item",
+         "payload": {"type": "function_call_output", "call_id": "c1", "output": None}},
+    ])
+
+    t = parse(str(p))
+    assert len(t.messages) == 1
+    tc = t.messages[0].tool_calls[0]
+    assert isinstance(tc.summary, str)
+    assert "ls" in tc.summary
+    assert "line 1" in capsys.readouterr().err

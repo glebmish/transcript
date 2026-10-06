@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
+from transcript.parsers.common import as_dict, as_int, as_str
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 _EXIT_RE = re.compile(r"(?:Process exited with code|Exit code:)\s*(-?\d+)")
@@ -117,7 +118,10 @@ def _first_string(value) -> str:
 
 def _tool_summary(name: str, args: dict, raw_input: str) -> str:
     if name == "exec_command":
-        return args.get("cmd") or _first_string(args) or "?"
+        cmd = args.get("cmd")
+        if isinstance(cmd, list):
+            cmd = " ".join(str(part) for part in cmd)
+        return as_str(cmd)[:80] or _first_string(args) or "?"
     if name == "write_stdin":
         session_id = args.get("session_id", "?")
         chars = args.get("chars", "")
@@ -201,10 +205,10 @@ def _make_tool_call(pending: dict, output: str, patch_event: dict | None = None)
 
 
 def _apply_token_usage(msg: Message, usage: dict) -> None:
-    msg.tokens_in += usage.get("input_tokens", 0)
-    msg.tokens_out += usage.get("output_tokens", 0)
-    msg.tokens_cached += usage.get("cached_input_tokens", 0)
-    msg.tokens_thinking += usage.get("reasoning_output_tokens", 0)
+    msg.tokens_in += as_int(usage.get("input_tokens"))
+    msg.tokens_out += as_int(usage.get("output_tokens"))
+    msg.tokens_cached += as_int(usage.get("cached_input_tokens"))
+    msg.tokens_thinking += as_int(usage.get("reasoning_output_tokens"))
 
 
 def parse(path: str) -> Transcript:
@@ -278,8 +282,11 @@ def parse(path: str) -> Transcript:
                 continue
             try:
                 entry = json.loads(line_str)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, RecursionError):
                 print(f"Warning: skipping malformed line {line_num}", file=sys.stderr)
+                continue
+            if not isinstance(entry, dict):
+                print(f"Warning: skipping non-object line {line_num}", file=sys.stderr)
                 continue
 
             ts = _parse_ts(entry.get("timestamp", ""))
@@ -290,7 +297,7 @@ def parse(path: str) -> Transcript:
                 continue
 
             if entry_type == "session_meta":
-                session_id = payload.get("id") or session_id
+                session_id = as_str(payload.get("id")) or session_id
                 meta_ts = _parse_ts(payload.get("timestamp", ""))
                 if meta_ts != _MIN_TS:
                     start_time = meta_ts
@@ -298,7 +305,7 @@ def parse(path: str) -> Transcript:
                 continue
 
             if entry_type == "turn_context":
-                active_model = payload.get("model") or active_model
+                active_model = as_str(payload.get("model")) or active_model
                 if current_assistant and active_model:
                     current_assistant.model = active_model
                 continue
@@ -306,8 +313,9 @@ def parse(path: str) -> Transcript:
             if entry_type == "event_msg":
                 event_type = payload.get("type")
                 if event_type == "token_count":
-                    usage = payload.get("info", {}).get("last_token_usage", {})
-                    if isinstance(usage, dict):
+                    info = as_dict(payload.get("info"))
+                    usage = info.get("last_token_usage")
+                    if isinstance(usage, dict) and usage:
                         target = current_assistant
                         if target is None:
                             for msg in reversed(messages):
@@ -317,7 +325,7 @@ def parse(path: str) -> Transcript:
                         if target is not None:
                             _apply_token_usage(target, usage)
                 elif event_type == "patch_apply_end":
-                    call_id = payload.get("call_id")
+                    call_id = as_str(payload.get("call_id"))
                     if call_id:
                         patch_events[call_id] = payload
                         update_completed_tool(call_id, payload)
@@ -361,14 +369,14 @@ def parse(path: str) -> Transcript:
 
             if item_type in ("function_call", "custom_tool_call"):
                 msg = ensure_assistant(ts)
-                call_id = payload.get("call_id", "")
+                call_id = as_str(payload.get("call_id"))
                 if not call_id:
                     print(f"Warning: Codex tool call without call_id at line {line_num}", file=sys.stderr)
                     continue
                 raw_input = payload.get("arguments") if item_type == "function_call" else payload.get("input")
                 args, raw_string = _parse_arguments(raw_input)
                 pending_tools[call_id] = {
-                    "name": payload.get("name", "?"),
+                    "name": as_str(payload.get("name")) or "?",
                     "args": args,
                     "raw_input": raw_string,
                     "status": payload.get("status"),
@@ -378,13 +386,15 @@ def parse(path: str) -> Transcript:
                 continue
 
             if item_type in ("function_call_output", "custom_tool_call_output"):
-                call_id = payload.get("call_id", "")
+                call_id = as_str(payload.get("call_id"))
                 pending = pending_tools.pop(call_id, None)
                 if pending is None:
                     continue
                 msg = ensure_assistant(ts)
-                output = payload.get("output", "")
-                if not isinstance(output, str):
+                output = payload.get("output")
+                if output is None:
+                    output = ""
+                elif not isinstance(output, str):
                     output = json.dumps(output, indent=2, sort_keys=True)
                 tool_call = _make_tool_call(pending, output, patch_events.get(call_id))
                 tool_idx = len(msg.tool_calls)

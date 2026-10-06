@@ -31,3 +31,10 @@ def test_detect_json_without_session_id(tmp_path):
     p.write_text('{"messages": []}')
     with pytest.raises(ValueError, match="Could not detect format"):
         detect_format(str(p))
+
+
+def test_deeply_nested_json_raises_value_error(tmp_path):
+    p = tmp_path / "deep.json"
+    p.write_text("[" * 200_000)
+    with pytest.raises(ValueError):
+        detect_format(str(p))

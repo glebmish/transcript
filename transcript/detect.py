@@ -14,7 +14,7 @@ def detect_format(path: str) -> str:
         data = json.loads(raw)
         if isinstance(data, dict) and "messages" in data and "sessionId" in data:
             return "gemini"
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, RecursionError):
         pass
 
     # Try JSONL formats with known type fields
@@ -37,7 +37,7 @@ def detect_format(path: str) -> str:
                     return "codex"
             if entry_type in _CLAUDE_TYPES:
                 return "claude"
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, RecursionError):
             continue
 
     raise ValueError(

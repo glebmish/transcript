@@ -165,9 +165,12 @@ Cancelled tools usually mean the user rejected or cancelled a permission prompt.
 
 ## Edge Cases
 
-- Missing `thoughts`: default to empty list.
-- Missing `toolCalls`: default to empty list.
-- Missing `tokens`: token counts default to 0.
+- Top-level value that is not a JSON object: parse error.
+- `messages[]` entries that are not objects: skip with warning including the entry number.
+- Missing or null `thoughts`: default to empty list.
+- Missing or null `toolCalls`: default to empty list.
+- Missing or null `tokens`, or non-numeric token counts: token counts default to 0.
+- Null or wrong-typed `content`, `args`, `functionResponse`, or `response`: treat as missing; never abort the parse.
 - Missing `displayName`: fall back to `name`.
 - User `content` may be an array or string.
 - Empty result array: use `resultDisplay`, otherwise `ok`.

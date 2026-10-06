@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
+from transcript.parsers.common import as_dict, as_int, as_str
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -15,40 +16,45 @@ def _parse_ts(raw: str) -> datetime:
         return _MIN_TS
 
 
-def _tool_summary(name: str, input_data: dict) -> str:
+def _tool_summary(name: str, input_data) -> str:
+    input_data = as_dict(input_data)
+
+    def arg(key: str) -> str:
+        return as_str(input_data.get(key))
+
     if name in ("Read", "Write", "Edit"):
-        return input_data.get("file_path", "?")
+        return arg("file_path") or "?"
     if name == "Bash":
-        return input_data.get("description") or (input_data.get("command", "?")[:80])
+        return arg("description") or (arg("command") or "?")[:80]
     if name == "Grep":
-        pat = input_data.get("pattern", "?")
-        path = input_data.get("path", "")
+        pat = arg("pattern") or "?"
+        path = arg("path")
         return f"{pat} in {path}" if path else pat
     if name == "Glob":
-        return input_data.get("pattern", "?")
+        return arg("pattern") or "?"
     if name in ("WebFetch", "WebSearch"):
-        return input_data.get("url") or input_data.get("query") or "?"
+        return arg("url") or arg("query") or "?"
     if name == "Agent":
-        return input_data.get("description") or (input_data.get("prompt", "?")[:80])
+        return arg("description") or (arg("prompt") or "?")[:80]
     if name == "Skill":
-        return input_data.get("skill", "?")
+        return arg("skill") or "?"
     if name in ("TaskCreate", "TaskUpdate"):
-        return input_data.get("subject") or input_data.get("taskId") or "?"
+        return arg("subject") or str(input_data.get("taskId") or "?")
     if name == "AskUserQuestion":
         questions = input_data.get("questions", "?")
         if isinstance(questions, list) and questions:
             return str(questions[0])[:80]
         return str(questions)[:80]
     if name == "StructuredOutput":
-        return input_data.get("recap_short") or input_data.get("goal") or input_data.get("prose", "?")[:80]
+        return arg("recap_short") or arg("goal") or (arg("prose") or "?")[:80]
     if name == "ToolSearch":
-        return input_data.get("query", "?")
+        return arg("query") or "?"
     if name == "Monitor":
-        return input_data.get("description") or input_data.get("command", "?")[:80]
+        return arg("description") or (arg("command") or "?")[:80]
     if name == "Workflow":
-        return input_data.get("scriptPath") or input_data.get("script", "?")[:80]
+        return arg("scriptPath") or (arg("script") or "?")[:80]
     if name == "TaskStop":
-        return input_data.get("task_id", "?")
+        return str(input_data.get("task_id") or "?")
     if name == "TaskList":
         return "tasks"
     for v in input_data.values():
@@ -74,7 +80,7 @@ def _tool_result_summary(tool_use_result) -> tuple[str, Status]:
         return f"FAILED: {short}", Status.FAILED
     if isinstance(tool_use_result, dict):
         if "file" in tool_use_result:
-            f = tool_use_result["file"]
+            f = as_dict(tool_use_result["file"])
             return f'{f.get("totalLines", "?")} lines', Status.PASSED
         if "filenames" in tool_use_result:
             return f'{tool_use_result.get("numFiles", "?")} files', Status.PASSED
@@ -88,6 +94,17 @@ def _tool_result_summary(tool_use_result) -> tuple[str, Status]:
                 return f"FAILED (exit {ec})", Status.FAILED
             return "ok", Status.PASSED
     return "ok", Status.PASSED
+
+
+def _result_text(content) -> str:
+    """Flatten a tool_result content payload (string, block list, or other) to text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(as_str(b.get("text")) for b in content if isinstance(b, dict))
+    if content is None:
+        return ""
+    return json.dumps(content, indent=2, sort_keys=True, default=str)
 
 
 def _finalize_assistant(msg: Message) -> None:
@@ -110,7 +127,7 @@ def _flush_pending_tool_uses(
         msg.tool_calls.append(ToolCall(
             name=tu["name"],
             display_name=tu["name"],
-            summary=_tool_summary(tu["name"], tu.get("input", {})),
+            summary=_tool_summary(tu["name"], tu.get("input")),
             result_summary="no result",
             result_full="",
             status=Status.FAILED,
@@ -135,8 +152,11 @@ def parse(path: str) -> Transcript:
                 continue
             try:
                 entry = json.loads(line_str)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, RecursionError):
                 print(f"Warning: skipping malformed line {line_num}", file=sys.stderr)
+                continue
+            if not isinstance(entry, dict):
+                print(f"Warning: skipping non-object line {line_num}", file=sys.stderr)
                 continue
 
             entry_type = entry.get("type")
@@ -158,7 +178,7 @@ def parse(path: str) -> Transcript:
                         text=["Conversation compacted"],
                     ))
                 elif subtype == "local_command":
-                    raw_content = entry.get("content", "")
+                    raw_content = as_str(entry.get("content"))
                     cmd_name = _extract_command_name(raw_content)
                     if cmd_name:
                         if current_assistant:
@@ -189,7 +209,8 @@ def parse(path: str) -> Transcript:
             if entry_type not in ("user", "assistant"):
                 continue
 
-            content = entry.get("message", {}).get("content", [])
+            message = as_dict(entry.get("message"))
+            content = message.get("content")
             ts = _parse_ts(entry.get("timestamp", ""))
 
             if entry_type == "user":
@@ -198,17 +219,13 @@ def parse(path: str) -> Transcript:
                     for block in content:
                         if not isinstance(block, dict) or block.get("type") != "tool_result":
                             continue
-                        tool_use_id = block.get("tool_use_id", "")
-                        is_error = block.get("is_error", False)
-                        result_full = block.get("content", "")
-                        if isinstance(result_full, list):
-                            result_full = "\n".join(
-                                b.get("text", "") for b in result_full if isinstance(b, dict)
-                            )
+                        tool_use_id = as_str(block.get("tool_use_id"))
+                        is_error = block.get("is_error") is True
+                        result_full = _result_text(block.get("content"))
 
                         if tool_use_id in pending_tool_uses:
                             tu = pending_tool_uses.pop(tool_use_id)
-                            summary = _tool_summary(tu["name"], tu.get("input", {}))
+                            summary = _tool_summary(tu["name"], tu.get("input"))
                             result_str, status = _tool_result_summary(tool_use_result)
                             if is_error:
                                 status = Status.FAILED
@@ -247,7 +264,7 @@ def parse(path: str) -> Transcript:
                         if not isinstance(b, dict):
                             continue
                         if b.get("type") == "text":
-                            text_parts.append(b.get("text", ""))
+                            text_parts.append(as_str(b.get("text")))
                         elif b.get("type") == "image":
                             source = b.get("source", {})
                             source_type = source.get("type") if isinstance(source, dict) else None
@@ -266,10 +283,9 @@ def parse(path: str) -> Transcript:
                     ))
 
             elif entry_type == "assistant":
-                msg = entry.get("message", {})
-                model = msg.get("model")
-                usage = msg.get("usage", {})
-                msg_id = msg.get("id")
+                model = as_str(message.get("model")) or None
+                usage = as_dict(message.get("usage"))
+                msg_id = as_str(message.get("id")) or None
 
                 # Start a new Message when msg_id changes (or no current assistant).
                 # Multiple streaming entries share msg_id: merge those with max().
@@ -293,14 +309,14 @@ def parse(path: str) -> Transcript:
                 # tokens_cached = cache_read + cache_creation (everything not charged)
                 # billable = tokens_in - tokens_cached = input_tokens
                 if msg_id:
-                    raw_input = usage.get("input_tokens", 0)
-                    cache_creation = usage.get("cache_creation_input_tokens", 0)
-                    cache_read = usage.get("cache_read_input_tokens", 0)
+                    raw_input = as_int(usage.get("input_tokens"))
+                    cache_creation = as_int(usage.get("cache_creation_input_tokens"))
+                    cache_read = as_int(usage.get("cache_read_input_tokens"))
                     total_in = raw_input + cache_creation + cache_read
                     total_cached = cache_creation + cache_read
 
                     current_assistant.tokens_in = max(current_assistant.tokens_in, total_in)
-                    current_assistant.tokens_out = max(current_assistant.tokens_out, usage.get("output_tokens", 0))
+                    current_assistant.tokens_out = max(current_assistant.tokens_out, as_int(usage.get("output_tokens")))
                     current_assistant.tokens_cached = max(current_assistant.tokens_cached, total_cached)
                     if model:
                         current_assistant.model = model
@@ -311,20 +327,23 @@ def parse(path: str) -> Transcript:
                             continue
                         btype = block.get("type")
                         if btype == "thinking":
-                            text = block.get("thinking", "")
+                            text = as_str(block.get("thinking"))
                             if text.strip():
                                 idx = len(current_assistant.thinking)
                                 current_assistant.thinking.append(text.strip())
                                 current_assistant.content_order.append(("thinking", idx))
                         elif btype == "text":
-                            text = block.get("text", "")
+                            text = as_str(block.get("text"))
                             if text.strip():
                                 idx = len(current_assistant.text)
                                 current_assistant.text.append(text.strip())
                                 current_assistant.content_order.append(("text", idx))
                         elif btype == "tool_use":
-                            tu_id = block.get("id", "")
-                            pending_tool_uses[tu_id] = block
+                            tu_id = as_str(block.get("id"))
+                            pending_tool_uses[tu_id] = {
+                                "name": as_str(block.get("name")) or "?",
+                                "input": block.get("input"),
+                            }
                             # Reserve a slot; will be filled when result arrives
                             pending_tool_order[tu_id] = len(current_assistant.content_order)
                             current_assistant.content_order.append(("tool", -1))

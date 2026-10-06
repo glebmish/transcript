@@ -112,8 +112,8 @@ Each parser is responsible for:
 - converting native entries into `Message` and `ToolCall` objects
 - preserving full visible text and tool output
 - computing transcript totals, model set, tool stats, and cost
-- handling malformed entries gracefully when possible
-- warning to stderr for malformed entries that can be skipped
+- handling malformed entries gracefully when possible: native logs are untrusted input, so null or wrong-typed nested fields are treated as missing (empty string, list, dict, or 0) rather than aborting the parse
+- warning to stderr for malformed entries that can be skipped, including valid JSON values that are not objects
 
 Parsers should skip native internals only when the relevant agent mapping spec says they are intentionally out of presentation scope.
 
@@ -133,6 +133,8 @@ If a model is unknown, cost for that message is unknown. Transcript cost sums kn
 ## Detection Contract
 
 Format detection is a convenience layer. It must not contain parser-specific normalization logic.
+
+Detection must not crash on hostile input: undecodable JSON, including JSON nested deeply enough to raise `RecursionError`, is treated as "not this format".
 
 - Gemini CLI: single JSON object with `sessionId` and `messages`.
 - Claude Code: JSONL with at least one valid entry whose `type` is a known Claude Code entry type.

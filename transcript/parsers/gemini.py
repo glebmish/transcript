@@ -1,7 +1,9 @@
 import json
+import sys
 from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
+from transcript.parsers.common import as_dict, as_int, as_list, as_str
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -19,45 +21,50 @@ def _parse_ts(raw: str) -> datetime:
         return _MIN_TS
 
 
-def _tool_summary(name: str, args: dict) -> str:
+def _tool_summary(name: str, args) -> str:
+    args = as_dict(args)
+
+    def arg(key: str) -> str:
+        return as_str(args.get(key))
+
     if name == "read_file":
-        return args.get("absolute_path") or args.get("file_path") or "?"
+        return arg("absolute_path") or arg("file_path") or "?"
     if name in ("write_file", "replace"):
-        return args.get("file_path", "?")
+        return arg("file_path") or "?"
     if name == "read_many_files":
         paths = args.get("paths", "?")
         if isinstance(paths, list):
             return ", ".join(str(p) for p in paths[:3])
         return str(paths)
     if name == "list_directory":
-        return args.get("dir_path", "?")
+        return arg("dir_path") or "?"
     if name == "run_shell_command":
-        return args.get("description") or (args.get("command", "?")[:80])
+        return arg("description") or (arg("command") or "?")[:80]
     if name in ("grep_search", "search_file_content"):
-        return args.get("pattern", "?")
+        return arg("pattern") or "?"
     if name == "glob":
-        return args.get("pattern", "?")
+        return arg("pattern") or "?"
     if name == "google_web_search":
-        return args.get("query", "?")
+        return arg("query") or "?"
     if name == "web_fetch":
-        return args.get("url") or args.get("prompt") or "?"
+        return arg("url") or arg("prompt") or "?"
     if name == "activate_skill":
-        return args.get("name", "?")
+        return arg("name") or "?"
     if name == "ask_user":
         q = args.get("questions", "?")
         if isinstance(q, list) and q:
             return str(q[0])[:80]
         return str(q)[:80]
     if name == "enter_plan_mode":
-        return args.get("reason", "?")
+        return arg("reason") or "?"
     if name == "exit_plan_mode":
-        return args.get("plan_path", "?")
+        return arg("plan_path") or "?"
     if name == "codebase_investigator":
-        return args.get("objective", "?")[:80]
+        return (arg("objective") or "?")[:80]
     if name == "generalist":
-        return args.get("request", "?")[:80]
+        return (arg("request") or "?")[:80]
     if name == "cli_help":
-        return args.get("question", "?")[:80]
+        return (arg("question") or "?")[:80]
     for v in args.values():
         if isinstance(v, str) and v:
             return v[:80]
@@ -96,23 +103,31 @@ def _summary_from_display(display) -> str:
     return str(display)[:50]
 
 
+def _to_text(value) -> str:
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return json.dumps(value, indent=2, sort_keys=True, default=str)
+
+
 def _extract_result(tc: dict) -> tuple[str, str, Status]:
     """Returns (result_summary, result_full, status)."""
-    status = _STATUS_MAP.get(tc.get("status", "success"), Status.PASSED)
+    status = _STATUS_MAP.get(as_str(tc.get("status")) or "success", Status.PASSED)
     result_display = tc.get("resultDisplay") or ""
-    result_data = tc.get("result") or []
+    result_data = as_list(tc.get("result"))
 
     result_full = ""
-    if result_data and isinstance(result_data, list):
+    if result_data:
         fr = result_data[0]
         if isinstance(fr, dict):
-            resp = fr.get("functionResponse", {}).get("response", {})
+            resp = as_dict(as_dict(fr.get("functionResponse")).get("response"))
             if "error" in resp:
-                error_text = resp["error"]
+                error_text = _to_text(resp["error"])
                 # Cancelled tools may have error text but keep CANCELLED status
                 error_status = Status.CANCELLED if status == Status.CANCELLED else Status.FAILED
                 return error_text, error_text, error_status
-            result_full = resp.get("output", "")
+            result_full = _to_text(resp.get("output"))
 
     display_summary = _summary_from_display(result_display)
     if display_summary:
@@ -127,11 +142,16 @@ def _extract_result(tc: dict) -> tuple[str, str, Status]:
 def parse(path: str) -> Transcript:
     with open(path) as f:
         data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("expected a JSON object at the top level")
 
     messages: list[Message] = []
     prev_input = 0
 
-    for entry in data.get("messages", []):
+    for entry_num, entry in enumerate(as_list(data.get("messages")), 1):
+        if not isinstance(entry, dict):
+            print(f"Warning: skipping non-object message {entry_num}", file=sys.stderr)
+            continue
         msg_type = entry.get("type")
         ts = _parse_ts(entry.get("timestamp", ""))
 
@@ -139,21 +159,21 @@ def parse(path: str) -> Transcript:
             continue
 
         if msg_type == "user":
-            content = entry.get("content", [])
+            content = entry.get("content")
             text = ""
             if isinstance(content, str):
                 text = content
             elif isinstance(content, list):
                 text = " ".join(
-                    item.get("text", "") for item in content if isinstance(item, dict)
+                    as_str(item.get("text")) for item in content if isinstance(item, dict)
                 )
             if text.strip():
                 messages.append(Message(role=Role.USER, timestamp=ts, text=[text.strip()]))
 
         elif msg_type == "gemini":
-            tokens = entry.get("tokens", {})
-            model = entry.get("model")
-            full_input = tokens.get("input", 0)
+            tokens = as_dict(entry.get("tokens"))
+            model = as_str(entry.get("model")) or None
+            full_input = as_int(tokens.get("input"))
             delta_input = full_input - prev_input if prev_input > 0 else full_input
             prev_input = full_input
 
@@ -162,13 +182,13 @@ def parse(path: str) -> Transcript:
                 timestamp=ts,
                 model=model,
                 tokens_in=delta_input,
-                tokens_out=tokens.get("output", 0),
-                tokens_cached=tokens.get("cached", 0),
-                tokens_thinking=tokens.get("thoughts", 0),
+                tokens_out=as_int(tokens.get("output")),
+                tokens_cached=as_int(tokens.get("cached")),
+                tokens_thinking=as_int(tokens.get("thoughts")),
             )
 
-            for thought in entry.get("thoughts", []):
-                desc = thought.get("description", "")
+            for thought in as_list(entry.get("thoughts")):
+                desc = as_str(as_dict(thought).get("description"))
                 if desc.strip():
                     idx = len(msg.thinking)
                     msg.thinking.append(desc.strip())
@@ -180,10 +200,12 @@ def parse(path: str) -> Transcript:
                 msg.text.append(content.strip())
                 msg.content_order.append(("text", idx))
 
-            for tc in entry.get("toolCalls", []):
-                name = tc.get("name", "?")
-                display_name = tc.get("displayName") or name
-                summary = _tool_summary(name, tc.get("args", {}))
+            for tc in as_list(entry.get("toolCalls")):
+                if not isinstance(tc, dict):
+                    continue
+                name = as_str(tc.get("name")) or "?"
+                display_name = as_str(tc.get("displayName")) or name
+                summary = _tool_summary(name, tc.get("args"))
                 result_summary, result_full, status = _extract_result(tc)
                 tool_idx = len(msg.tool_calls)
                 msg.content_order.append(("tool", tool_idx))
@@ -242,7 +264,7 @@ def _build_transcript(messages: list[Message], data: dict) -> Transcript:
     return Transcript(
         messages=messages,
         source_format="gemini",
-        session_id=data.get("sessionId"),
+        session_id=as_str(data.get("sessionId")) or None,
         start_time=start,
         end_time=end,
         models=models,

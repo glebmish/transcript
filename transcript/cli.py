@@ -48,7 +48,7 @@ def main():
     if not fmt:
         try:
             fmt = detect_format(args.input)
-        except ValueError as e:
+        except (ValueError, RecursionError) as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
 

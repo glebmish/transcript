@@ -89,3 +89,12 @@ def test_parse_error(tmp_path):
     bad.write_text("not a log")
     r = _run(str(bad))
     assert r.returncode == 1
+
+
+def test_deeply_nested_json_reports_clean_error(tmp_path):
+    deep = tmp_path / "deep.json"
+    deep.write_text("[" * 200_000)
+    r = _run(str(deep))
+    assert r.returncode == 1
+    assert "Traceback" not in r.stderr
+    assert "Error" in r.stderr

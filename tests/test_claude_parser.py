@@ -180,3 +180,61 @@ def test_known_hook_system_subtypes_do_not_warn(tmp_path, capsys):
     parse(str(p))
     captured = capsys.readouterr()
     assert "unknown system subtype" not in captured.err
+
+
+def test_non_dict_json_line_is_skipped_with_warning(tmp_path, capsys):
+    p = tmp_path / "non_dict.jsonl"
+    p.write_text(
+        '{"type":"user","timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":"hi"}}\n'
+        '[1,2]\n'
+        '"just a string"\n'
+        '{"type":"user","timestamp":"2026-01-01T10:00:01Z","message":{"role":"user","content":"again"}}\n'
+    )
+
+    t = parse(str(p))
+    assert [m.text for m in t.messages] == [["hi"], ["again"]]
+    err = capsys.readouterr().err
+    assert "line 2" in err
+    assert "line 3" in err
+
+
+def test_null_and_wrong_type_nested_fields_do_not_abort(tmp_path):
+    p = tmp_path / "nulls.jsonl"
+    lines = [
+        {"type": "user", "timestamp": "2026-01-01T10:00:00Z", "message": None},
+        {"type": "user", "timestamp": "2026-01-01T10:00:01Z", "message": {"role": "user", "content": "start"}},
+        {"type": "assistant", "timestamp": "2026-01-01T10:00:02Z", "message": {
+            "id": "msg_null_usage", "role": "assistant", "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": "ok"}], "usage": None,
+        }},
+        {"type": "assistant", "timestamp": "2026-01-01T10:00:03Z", "message": {
+            "id": "msg_bad_numbers", "role": "assistant", "model": "claude-sonnet-4-6",
+            "content": [
+                {"type": "thinking", "thinking": None},
+                {"type": "text", "text": None},
+                {"type": "tool_use", "id": "tu_1", "name": "Bash", "input": None},
+            ],
+            "usage": {"input_tokens": None, "output_tokens": "7", "cache_read_input_tokens": [1]},
+        }},
+        {"type": "user", "timestamp": "2026-01-01T10:00:04Z", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu_1", "content": None},
+        ]}, "toolUseResult": {"file": None}},
+        {"type": "assistant", "timestamp": "2026-01-01T10:00:05Z", "message": {
+            "id": "msg_null_content", "role": "assistant", "model": "claude-sonnet-4-6",
+            "content": None, "usage": {"input_tokens": 5, "output_tokens": 1},
+        }},
+        {"type": "system", "subtype": "local_command", "timestamp": "2026-01-01T10:00:06Z", "content": None},
+    ]
+    p.write_text("\n".join(json.dumps(line) for line in lines))
+
+    t = parse(str(p))
+    assistants = [m for m in t.messages if m.role == Role.ASSISTANT]
+    assert len(assistants) == 3
+    assert assistants[0].text == ["ok"]
+    assert assistants[0].tokens_in == 0
+    assert assistants[0].tokens_out == 0
+    assert assistants[1].tokens_in == 0
+    assert assistants[1].tokens_out == 0
+    assert len(assistants[1].tool_calls) == 1
+    assert assistants[1].tool_calls[0].result_full == ""
+    assert assistants[2].tokens_in == 5

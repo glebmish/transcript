@@ -163,6 +163,8 @@ Codex token counts are emitted in `event_msg` entries with `payload.type == "tok
 
 Attach each token-count event to the current assistant message for the turn. If a turn emits multiple token-count events, sum their `last_token_usage` values on that assistant message. `payload.info.total_token_usage` is cumulative and should be used for transcript totals only when per-message attachment is impossible.
 
+`token_count` events may carry `"info": null` or a null `last_token_usage` (for example before the first model response). These events have no usage to apply and are ignored.
+
 Cached input tokens are treated as free by the common cost contract.
 
 ## Status Mapping
@@ -212,6 +214,9 @@ Skipped metadata may be revisited if the common model gains a metadata surface.
 ## Edge Cases
 
 - Malformed JSONL lines: skip with warning including line number.
+- Valid JSON lines that are not objects (for example `[1,2]`): skip with warning including line number.
+- Null or wrong-typed nested fields (`payload`, `info`, usage counts, `call_id`, `model`): treat as missing; never abort the parse.
+- `exec_command` `cmd` may be an argument list: join it with spaces for the summary.
 - Missing timestamp: use UTC `datetime.min`.
 - Missing `session_meta`: parse response items and set `session_id=None`.
 - Missing `turn_context`: assistant model is `None`.
