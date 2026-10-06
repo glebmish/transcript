@@ -6,9 +6,13 @@ Requires Python 3.12+.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e . pytest
+.venv/bin/pip install --upgrade pip          # --group needs pip >= 25.1
+.venv/bin/pip install -e . --group dev       # package + pytest + ruff
 .venv/bin/pytest tests/ -q
+.venv/bin/ruff check .
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same two checks on every push to `main` and every pull request: ruff once, and pytest on Linux with Python 3.12, 3.13 and 3.14, on macOS with 3.14, and on Linux 3.12 against the lowest supported `textual`/`rich`. `ruff check --fix .` fixes most lint findings automatically.
 
 Run the tool from the checkout with `.venv/bin/transcript <logfile>` or `.venv/bin/transcript view <logfile>`.
 

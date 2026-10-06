@@ -1,11 +1,65 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
 [project]
 name = "transcript"
 version = "0.1.0"
+description = "Convert Claude Code, Gemini CLI and Codex conversation logs into readable Markdown transcripts, or browse them in a terminal UI."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Gleb Mishchenko" }]
 requires-python = ">=3.12"
 dependencies = ["textual>=2.0,<9", "rich>=13"]
+keywords = ["claude-code", "gemini-cli", "codex", "transcript", "markdown", "tui", "llm", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/glebmish/transcript"
+Repository = "https://github.com/glebmish/transcript"
+Issues = "https://github.com/glebmish/transcript/issues"
+Releases = "https://github.com/glebmish/transcript/releases"
 
 [project.scripts]
 transcript = "transcript.cli:main"
 
+[tool.hatch.build.targets.wheel]
+packages = ["transcript"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/transcript",
+    "/LICENSE",
+    "/README.md",
+    "/pyproject.toml",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff==0.16.10"]
+
+[tool.ruff]
+# Vendored agent-skill scripts are maintainer tooling, not part of the package.
+extend-exclude = [".agents", ".claude"]
+
+[tool.ruff.lint]
+# Ruff's classic default set (pyflakes + syntax/statement errors), selected
+# explicitly so a ruff upgrade can't silently widen it.
+select = ["E4", "E7", "E9", "F"]

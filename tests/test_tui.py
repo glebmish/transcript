@@ -106,7 +106,7 @@ def test_tui_never_renders_escape_characters():
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
     tool = ToolCall(
         name="Bash", display_name="Bash", summary=f"echo {_OSC52}",
-        result_summary=f"\x1b[2Jdone", result_full=f"line\n{_OSC52}\x9b31m",
+        result_summary="\x1b[2Jdone", result_full=f"line\n{_OSC52}\x9b31m",
         status=Status.PASSED,
     )
     transcript = _transcript([
@@ -188,7 +188,6 @@ def test_search_ignores_header_markup_and_matches_visible_text():
 
 
 def test_thinking_line_count_is_singular_for_one_line():
-    from transcript.tui.widgets import ThinkingWidget
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
     transcript = _transcript([
         Message(role=Role.ASSISTANT, timestamp=ts, thinking=["one", "two\nlines"],

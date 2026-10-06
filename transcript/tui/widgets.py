@@ -1,5 +1,4 @@
-import textwrap
-from textual.widgets import Static, Input
+from textual.widgets import Static
 from textual.containers import VerticalScroll, Horizontal
 from textual.content import Content
 from rich.syntax import Syntax

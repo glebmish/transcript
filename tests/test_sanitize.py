@@ -39,7 +39,7 @@ def _hostile_transcript() -> Transcript:
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
     tool = ToolCall(
         name="Bash", display_name="Bash", summary=f"echo {OSC52}",
-        result_summary=f"\x1b[2Jcleared", result_full=f"out\x1b]0;pwned title\x07\n{OSC52}",
+        result_summary="\x1b[2Jcleared", result_full=f"out\x1b]0;pwned title\x07\n{OSC52}",
         status=Status.PASSED,
     )
     return Transcript(

@@ -9,7 +9,6 @@ from transcript.model import Transcript
 from transcript.sanitize import sanitize_transcript
 from transcript.tui.widgets import (
     ConversationPanel, DetailPanel, ToolCallWidget, ThinkingWidget,
-    MessageHeaderWidget, MessageTextWidget, GutterRow,
 )
 
 # All focusable block types in the conversation panel

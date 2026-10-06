@@ -5,8 +5,9 @@ CLI + TUI tool for converting Claude Code, Gemini CLI and Codex conversation log
 ## Commands
 
 ```bash
-# Run tests
+# Run tests and lint (same checks as CI)
 .venv/bin/pytest tests/ -v
+.venv/bin/ruff check .
 
 # Run the tool (must be installed: pip install -e .)
 transcript <logfile>

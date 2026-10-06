@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from transcript.model import Status, Role, Message, ToolCall, Transcript
+from transcript.model import Status, Role, ToolCall, Transcript
 from transcript.parsers.common import is_real_model
 from transcript.pricing import estimate_cost
 from transcript.sanitize import sanitize_text

@@ -1,8 +1,10 @@
 import subprocess
+import sys
 from pathlib import Path
 
-VENV_PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
-CLI = [VENV_PYTHON, "-m", "transcript"]
+# Run the CLI with the interpreter running pytest, so the tests work in any
+# venv (local .venv, CI, tox) rather than only in ./.venv.
+CLI = [sys.executable, "-m", "transcript"]
 CLAUDE_FIXTURE = str(Path(__file__).parent / "fixtures" / "claude_minimal.jsonl")
 GEMINI_FIXTURE = str(Path(__file__).parent / "fixtures" / "gemini_minimal.json")
 CODEX_FIXTURE = str(Path(__file__).parent / "fixtures" / "codex_minimal.jsonl")

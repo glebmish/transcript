@@ -92,7 +92,8 @@ def test_parse_cost():
 
 
 def test_deduplication():
-    import tempfile, os
+    import tempfile
+    import os
     lines = [
         '{"type":"user","timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
         '{"type":"assistant","timestamp":"2026-01-01T10:00:01Z","message":{"id":"msg_dup","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":0}}}',
@@ -117,7 +118,8 @@ def test_unresolved_tool_use_then_new_assistant_turn():
     content_order slot leaks into the next assistant (which has a shorter
     content_order) and triggers IndexError at end-of-file flush.
     """
-    import tempfile, os
+    import tempfile
+    import os
     lines = [
         '{"type":"user","timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
         # Assistant A emits text + tool_use; no tool_result ever arrives.
