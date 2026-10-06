@@ -114,6 +114,8 @@ AssertionError: expected 200 got 401
 ```
 ````
 
+Expanded tool lines are prefixed `x ` when the call failed, `~ ` when it was cancelled, and two spaces otherwise.
+
 ### Options
 
 | Option | Effect |
@@ -182,9 +184,11 @@ transcript view session.jsonl
 
 | Agent | Path | Format |
 |-------|------|--------|
-| Claude Code | `~/.claude/projects/<hash>/<session>.jsonl` | JSONL |
+| Claude Code | `~/.claude/projects/<project>/<session>.jsonl` | JSONL |
 | Gemini CLI | `~/.gemini/tmp/<hash>/chats/session-*.json` | JSON |
 | Codex CLI/Desktop | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | JSONL |
+
+(Claude Code's `<project>` folder is the project's path with every character other than a letter or digit replaced by `-`, for example `-Users-me-src-app` for `/Users/me/src/app`.)
 
 The format is auto-detected. Use `--format claude`, `--format gemini` or `--format codex` to override it.
 
