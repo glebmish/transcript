@@ -1,0 +1,196 @@
+name: Release
+
+# Push a tag vX.Y.Z (matching [project].version in pyproject.toml) to build,
+# smoke-test and publish sdist + wheel as a GitHub Release.
+# Run manually (workflow_dispatch) for a dry run: same build and smoke tests,
+# no release is created.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build sdist and wheel
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Read package version
+        id: version
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Package version: $version"
+
+      - name: Verify tag matches package version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match pyproject.toml version $VERSION (expected v$VERSION)"
+              exit 1
+            fi
+            echo "Tag $GITHUB_REF_NAME matches version $VERSION"
+          else
+            echo "Dry run on $GITHUB_REF_TYPE $GITHUB_REF_NAME: a release would need tag v$VERSION"
+          fi
+
+      - name: Build
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          twine check --strict dist/*
+
+      - name: Verify artifact names and contents
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          wheel="dist/transcript-$VERSION-py3-none-any.whl"
+          sdist="dist/transcript-$VERSION.tar.gz"
+          ls -l dist
+          test -f "$wheel" || { echo "::error::missing $wheel"; exit 1; }
+          test -f "$sdist" || { echo "::error::missing $sdist"; exit 1; }
+          files=(dist/*)
+          test "${#files[@]}" -eq 2 || { echo "::error::expected exactly 2 files in dist/"; exit 1; }
+
+          wheel_files=$(python -m zipfile -l "$wheel" | awk 'NR>1 {print $1}')
+          sdist_files=$(tar tzf "$sdist")
+          echo "$wheel_files"
+          echo "$sdist_files"
+
+          # Wheel: only the transcript package and its dist-info.
+          stray=$(grep -vE "^(transcript/|transcript-$VERSION\.dist-info/)" <<< "$wheel_files" || true)
+          if [ -n "$stray" ]; then echo "::error::unexpected files in wheel:"; echo "$stray"; exit 1; fi
+          for mod in cli.py parsers/claude.py parsers/codex.py parsers/gemini.py renderers/markdown.py tui/app.py tui/widgets.py; do
+            grep -qx "transcript/$mod" <<< "$wheel_files" || { echo "::error::wheel is missing transcript/$mod"; exit 1; }
+          done
+
+          # sdist: no tests, docs or agent tooling.
+          if grep -E "^transcript-$VERSION/(tests|docs|\.claude|\.agents|\.github)/" <<< "$sdist_files"; then
+            echo "::error::unexpected directories in sdist"; exit 1
+          fi
+
+      - name: Write checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  smoke:
+    name: Smoke test (Python ${{ matrix.python }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: tests/fixtures
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      - name: Verify checksums
+        run: cd dist && sha256sum --check SHA256SUMS.txt
+
+      - name: Install wheel into a fresh venv and run it
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/pip" install "dist/transcript-$VERSION-py3-none-any.whl"
+          cd "$RUNNER_TEMP"
+          bin="$RUNNER_TEMP/wheel-venv/bin/transcript"
+          "$bin" --help
+          for f in "$GITHUB_WORKSPACE"/tests/fixtures/*.json*; do
+            echo "::group::transcript $(basename "$f")"
+            "$bin" "$f" > out.md
+            head -n 5 out.md
+            grep -q '^# Transcript' out.md
+            echo "::endgroup::"
+          done
+          "$RUNNER_TEMP/wheel-venv/bin/python" -c 'import transcript.tui.app, transcript.tui.widgets'
+
+      - name: Install sdist into a fresh venv and run it
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          "$RUNNER_TEMP/sdist-venv/bin/pip" install "dist/transcript-$VERSION.tar.gz"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/sdist-venv/bin/transcript" "$GITHUB_WORKSPACE/tests/fixtures/claude_minimal.jsonl" > out.md
+          grep -q '^# Transcript' out.md
+
+      - name: Install wheel with pipx and run it
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          PIPX_HOME: ${{ runner.temp }}/pipx-home
+          PIPX_BIN_DIR: ${{ runner.temp }}/pipx-bin
+        run: |
+          pipx install --python "$(command -v python)" "dist/transcript-$VERSION-py3-none-any.whl"
+          cd "$RUNNER_TEMP"
+          "$PIPX_BIN_DIR/transcript" --help
+          "$PIPX_BIN_DIR/transcript" "$GITHUB_WORKSPACE/tests/fixtures/gemini_minimal.json" > out.md
+          grep -q '^# Transcript' out.md
+
+  release:
+    name: Create GitHub Release
+    needs: [build, smoke]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release and upload its assets
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          prerelease=()
+          if [[ "$VERSION" =~ (a|b|rc|dev)[0-9]*$ ]]; then prerelease=(--prerelease); fi
+          gh release create "$TAG" dist/* \
+            --verify-tag \
+            --title "transcript $TAG" \
+            --generate-notes \
+            "${prerelease[@]}"
