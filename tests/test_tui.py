@@ -164,3 +164,82 @@ def test_tui_markup_in_model_and_command_name_is_literal():
             assert "[blink red]x[/]" in text
 
     asyncio.run(run())
+
+
+def test_search_ignores_header_markup_and_matches_visible_text():
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    transcript = _transcript([
+        Message(role=Role.USER, timestamp=ts, text=["hello"]),
+        Message(role=Role.ASSISTANT, timestamp=ts, model="m", tokens_in=5, text=["world"]),
+    ])
+
+    async def run():
+        app = TranscriptApp(transcript)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            for markup_word in ("cyan", "bold", "green", "dim", "[/"):
+                assert app._find_matches(markup_word) == []
+            headers = app._find_matches("## assistant")
+            assert len(headers) == 1
+            assert headers[0].searchable_text.startswith("## Assistant")
+            assert len(app._find_matches("## user")) == 1
+
+    asyncio.run(run())
+
+
+def test_thinking_line_count_is_singular_for_one_line():
+    from transcript.tui.widgets import ThinkingWidget
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    transcript = _transcript([
+        Message(role=Role.ASSISTANT, timestamp=ts, thinking=["one", "two\nlines"],
+                content_order=[("thinking", 0), ("thinking", 1)]),
+    ])
+
+    async def run():
+        app = TranscriptApp(transcript)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            text = _rendered_text(app)
+            assert "Thinking (1 line)" in text
+            assert "Thinking (2 lines)" in text
+
+    asyncio.run(run())
+
+
+def test_help_lists_search_navigation_keys():
+    transcript = _transcript([Message(role=Role.USER, timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc), text=["hi"])])
+
+    async def run():
+        app = TranscriptApp(transcript)
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("question_mark")
+            await pilot.pause()
+            text = _rendered_text(app)
+            assert "n / N" in text
+            assert "Next / previous search match" in text
+
+    asyncio.run(run())
+
+
+def _summary_line(app) -> str:
+    return next(line for line in _rendered_text(app).splitlines() if "Tools:" in line)
+
+
+def test_summary_shows_cancelled_tool_count():
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    msgs = [Message(role=Role.USER, timestamp=ts, text=["hi"])]
+    with_cancel = _transcript(msgs)
+    with_cancel.tool_stats = ToolStats(passed=2, failed=1, cancelled=3)
+    no_cancel = _transcript(msgs)
+    no_cancel.tool_stats = ToolStats(passed=2, failed=1, cancelled=0)
+
+    async def run(t):
+        app = TranscriptApp(t)
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            return _summary_line(app)
+
+    assert "Tools: 6 (1 x, 3 cancelled)" in asyncio.run(run(with_cancel))
+    line = asyncio.run(run(no_cancel))
+    assert "Tools: 3 (1 x)" in line
+    assert "cancelled" not in line

@@ -22,55 +22,71 @@ render(transcript: Transcript, options: RenderOptions | None = None) -> str
 
 ## Layout
 
-The document starts with:
+Examples in this file are real output for the fixtures in `tests/fixtures/`. `→` is U+2192, `↑`/`↓` are U+2191/U+2193, and `·` is U+00B7.
+
+The document starts with a summary header (`transcript tests/fixtures/gemini_minimal.json`):
 
 ```markdown
 # Transcript
 
-- **Duration**: ...
-- **Model(s)**: ...
-- **Messages**: ...
-- **Tool calls**: ...
-- **Tokens**: ...
+- **Duration**: 5m 0s (2026-01-01 10:00:00 → 2026-01-01 10:05:00)
+- **Model(s)**: gemini-2.5-flash
+- **Messages**: 4 (2 user, 2 assistant)
+- **Tool calls**: 2 (1 passed, 0 failed, 1 cancelled)
+- **Tokens**: ↑13,000 ↓350 · $0.0024
 ```
 
-Tool-call and token lines are hidden when `show_cost` is false.
+- `Model(s)` is `unknown` when `Transcript.models` is empty.
+- `Messages` counts user and assistant messages only. Developer/system messages, local commands, and compaction markers are shown but not counted.
+- `Tool calls` is `N (P passed, F failed)`, with `, C cancelled` appended only when `C > 0`.
+- `Tokens` shows `$?` when `total_cost` is `None`, and appends ` (partial)` when `cost_is_partial` is true and a cost is known.
+- Tool-call and token lines are hidden when `show_cost` is false.
 
-Messages are separated by horizontal rules.
+A transcript with no messages renders only:
+
+```markdown
+# Transcript
+
+No messages.
+```
+
+Each message after the header is preceded by a blank line and a `---` horizontal rule.
 
 User messages render as:
 
 ```markdown
-## User · YYYY-MM-DD HH:MM:SS
+## User · 2026-01-01 10:00:00
 
-message text
+Help me refactor auth
 ```
+
+Developer and system messages use the same layout with `## Developer` or `## System`.
 
 Assistant messages render as:
 
 ```markdown
-## Assistant · YYYY-MM-DD HH:MM:SS · ↑in ↓out · $cost
+## Assistant · 2026-01-01 10:00:05 · ↑10,000 ↓500 · $0.02
 ```
 
-Token and cost suffixes are hidden when `show_cost` is false. The `· $cost` segment is also omitted for messages without a real model (no model, or Claude Code's `<synthetic>` placeholder), since no API call was priced.
+Token and cost suffixes are hidden when `show_cost` is false. The `· $cost` segment is also omitted for messages without a real model (no model, or Claude Code's `<synthetic>` placeholder), since no API call was priced. An unpriced real model shows `$?`.
 
 ## Content Ordering
 
-For assistant messages, use `Message.content_order` when non-empty. This preserves native interleaving:
+For assistant messages, use `Message.content_order` when non-empty. This preserves native interleaving (`transcript tests/fixtures/claude_minimal.jsonl`):
 
 ```markdown
-assistant text
+> Let me look at auth code.
 
-`Read: /file.py -> 10 lines`
+I'll read the middleware.
 
-more assistant text
+`Read: /src/auth.py → 84 lines`
 ```
 
 When `content_order` is empty, render thinking, then text, then tool calls.
 
 ## Thinking
 
-Thinking blocks render as Markdown blockquotes:
+Thinking blocks render as Markdown blockquotes, one `> ` per line:
 
 ```markdown
 > thinking line
@@ -81,28 +97,35 @@ They are omitted when `show_thinking` is false.
 
 ## Tool Calls
 
-Collapsed tool calls render compactly:
+Each tool call is `display_name: summary → result_summary`.
+
+With `content_order`, collapsed tool calls render one inline code span per call:
 
 ```markdown
-`Read: /src/auth.py -> 84 lines`
+`Read: /src/auth.py → 84 lines`
 ```
 
-When `content_order` is unavailable and tools are rendered as a batch, they may appear in a fenced block:
-
-```markdown
-Read: /src/auth.py -> 84 lines
-Bash: pytest tests/ -> FAILED (exit 1)
-```
-
-Expanded tool calls render the compact line followed by full output:
+When `content_order` is empty, all tool calls of the message render as one fenced batch after the text (a `claude_thinking.jsonl` message with `content_order` cleared):
 
 ````markdown
-Bash: pytest tests/ -> FAILED (exit 1)
-
 ```
-full output
+Read: /requirements.txt → ok
+Read: /tests/test_auth.py → ok
 ```
 ````
+
+With `expand_tools`, each call renders as a line with a status prefix, then the full output in a fence when `result_full` is non-empty (`transcript tests/fixtures/claude_minimal.jsonl --expand-tools`):
+
+````markdown
+x Bash: Run tests → FAILED (exit 1)
+
+```
+FAILED test_auth.py::test_jwt
+AssertionError: expected 200 got 401
+```
+````
+
+The prefix is `x ` for `FAILED`, `~ ` for `CANCELLED`, and two spaces for `PASSED`. Expanded calls follow `content_order` when present, otherwise they follow the text in list order.
 
 With `expand_tools`, output must not be truncated.
 
@@ -125,4 +148,8 @@ Compaction markers render as:
 --- conversation compacted ---
 ```
 
-Local commands render as timestamped italic command entries and are not counted as user messages.
+Local commands render as a timestamped italic line and are not counted as user messages. Their raw text is not repeated:
+
+```markdown
+*`/model` · 2026-01-01 10:00:00*
+```

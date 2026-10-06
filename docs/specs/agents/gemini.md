@@ -120,7 +120,15 @@ Use `resultDisplay` when present. It is not always a string:
 
 - string display: summarize the string directly
 - list display: treat as line-oriented display and summarize as `{n} lines`
-- dict display: prefer string fields such as `summary`, `result`, `state`, or `terminateReason`; otherwise summarize known structured fields such as `files` or `diffStat`
+- dict display, first match wins:
+  1. the first non-empty string among `summary`, `result`, `state`, `terminateReason`, summarized like a string display
+  2. a `files` list: `{n} files`
+  3. a non-empty `diffStat` string: used as-is
+  4. a truthy `isSubagentProgress`: `subagent progress`
+  5. otherwise `{n} fields` (the number of keys)
+- any other display type: its string form, truncated to 50 chars
+
+A string is summarized as itself when it is at most 50 chars with no newline, otherwise as `{n} lines`. Counts of 1 use the singular (`1 line`, `1 file`, `1 field`).
 
 The normalized `ToolCall.result_summary` must always be a string.
 
@@ -154,6 +162,7 @@ Gemini also reports `tokens.tool` and `tokens.total` in observed logs. These are
 | `status == "success"` | `PASSED` |
 | `status == "error"` | `FAILED` |
 | `status == "cancelled"` | `CANCELLED` |
+| missing or unknown `status` | `PASSED` |
 | response has `error` and status is not cancelled | `FAILED` |
 
 Cancelled tools usually mean the user rejected or cancelled a permission prompt.

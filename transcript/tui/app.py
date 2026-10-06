@@ -242,14 +242,15 @@ class TranscriptApp(App):
         detail = self.query_one(DetailPanel)
         help_text = (
             "[bold]Keybindings[/bold]\n\n"
-            "  Up/Down, j/k  Navigate between blocks\n"
+            "  Up/Down, j/k  Navigate between blocks (scroll in detail panel)\n"
             "  Enter         Expand focused item \u2192 detail panel\n"
             "  t             Toggle all thinking blocks\n"
             "  h             Cycle visibility: all \u2192 messages only \u2192 user+tools \u2192 all\n"
             "  /             Open search\n"
+            "  n / N         Next / previous search match\n"
             "  Tab           Switch focus between panels\n"
             "  Esc           Close detail panel / search\n"
-            "  q             Quit\n"
+            "  q, Ctrl+C     Quit\n"
             "  ?             Show this help\n"
         )
         detail.remove_children()

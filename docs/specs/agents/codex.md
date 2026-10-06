@@ -157,6 +157,8 @@ Codex function outputs are often plain display strings, not structured JSON. Non
 | 9 | one line of at most 50 chars | the line | `PASSED` |
 | 10 | otherwise | `{n} lines` | `PASSED` |
 
+Counts of 1 use the singular (`1 file changed`, `1 line`).
+
 Rules 5 and 6 only look at the first non-empty line, so output that merely mentions `cancelled`, `0 failed`, or `error:` further down is not a cancellation or failure.
 
 After that, the call item's own `status` overrides the status: `cancelled`/`canceled` gives `CANCELLED`, and `failed`/`error` gives `FAILED` with a `FAILED: ` prefix added to the summary if missing.

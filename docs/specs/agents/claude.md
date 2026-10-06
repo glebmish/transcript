@@ -145,6 +145,8 @@ From root-level `toolUseResult`:
 | string result | `FAILED: <first line, max 50 chars>` |
 | missing/unknown | `ok` |
 
+Counts of 1 use the singular (`1 line`, `1 file`, `1 match`). A missing count shows as `?` (`? lines`).
+
 If `tool_result.is_error` is true, status is `FAILED` and the result summary must be failure-coded.
 
 ## Token Mapping

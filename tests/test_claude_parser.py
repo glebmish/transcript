@@ -386,3 +386,12 @@ def test_local_command_without_command_name_kept_as_command_output(tmp_path):
     assert t.messages[0].role == Role.USER
     assert t.messages[0].command_name == "(command output)"
     assert t.messages[0].text == [raw]
+
+
+def test_result_counts_of_one_are_singular():
+    from transcript.parsers.claude import _tool_result_summary
+    assert _tool_result_summary({"file": {"totalLines": 1}})[0] == "1 line"
+    assert _tool_result_summary({"filenames": ["a"], "numFiles": 1})[0] == "1 file"
+    assert _tool_result_summary({"numMatches": 1})[0] == "1 match"
+    assert _tool_result_summary({"numMatches": 2})[0] == "2 matches"
+    assert _tool_result_summary({"file": {}})[0] == "? lines"

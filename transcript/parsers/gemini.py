@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
 from transcript.sanitize import sanitize_text
-from transcript.parsers.common import as_dict, as_int, as_list, as_str, is_real_model
+from transcript.parsers.common import as_dict, as_int, as_list, as_str, count_label, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -76,7 +76,7 @@ def _summarize_text(text: str) -> str:
     if len(text) <= 50 and "\n" not in text:
         return text
     lines = text.strip().split("\n")
-    return f"{len(lines)} lines"
+    return count_label(len(lines), "line")
 
 
 def _summary_from_display(display) -> str:
@@ -86,7 +86,7 @@ def _summary_from_display(display) -> str:
     if isinstance(display, str):
         return _summarize_text(display)
     if isinstance(display, list):
-        return f"{len(display)} lines"
+        return count_label(len(display), "line")
     if isinstance(display, dict):
         for key in ("summary", "result", "state", "terminateReason"):
             value = display.get(key)
@@ -94,13 +94,13 @@ def _summary_from_display(display) -> str:
                 return _summarize_text(value)
         files = display.get("files")
         if isinstance(files, list):
-            return f"{len(files)} files"
+            return count_label(len(files), "file")
         diff_stat = display.get("diffStat")
         if isinstance(diff_stat, str) and diff_stat:
             return diff_stat
         if display.get("isSubagentProgress"):
             return "subagent progress"
-        return f"{len(display)} fields"
+        return count_label(len(display), "field")
     return str(display)[:50]
 
 

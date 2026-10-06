@@ -111,7 +111,11 @@ def render(transcript: Transcript, options: RenderOptions | None = None) -> str:
     lines.append(f"- **Messages**: {total_msgs} ({user_count} user, {asst_count} assistant)")
 
     if opts.show_cost:
-        lines.append(f"- **Tool calls**: {ts.passed + ts.failed + ts.cancelled} ({ts.passed} passed, {ts.failed} failed)")
+        cancelled_str = f", {ts.cancelled} cancelled" if ts.cancelled else ""
+        lines.append(
+            f"- **Tool calls**: {ts.passed + ts.failed + ts.cancelled} "
+            f"({ts.passed} passed, {ts.failed} failed{cancelled_str})"
+        )
         cost_str = _fmt_cost(transcript.total_cost)
         if transcript.cost_is_partial and transcript.total_cost is not None:
             cost_str += " (partial)"

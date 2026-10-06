@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
 from transcript.sanitize import sanitize_text
-from transcript.parsers.common import as_dict, as_int, as_str, is_real_model
+from transcript.parsers.common import as_dict, as_int, as_str, count_label, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 _EXIT_RE = re.compile(r"(?:Process exited with code|Exit code:)\s*(-?\d+)")
@@ -158,10 +158,8 @@ def _summarize_output(output: str, patch_event: dict | None = None) -> tuple[str
             return f"FAILED: {first}" if first else "FAILED", Status.FAILED
         if success is True:
             changes = patch_event.get("changes")
-            if isinstance(changes, list) and changes:
-                return f"{len(changes)} files changed", Status.PASSED
-            if isinstance(changes, dict) and changes:
-                return f"{len(changes)} files changed", Status.PASSED
+            if isinstance(changes, (list, dict)) and changes:
+                return f"{count_label(len(changes), 'file')} changed", Status.PASSED
             return "ok", Status.PASSED
 
     match = _EXIT_RE.search(output)
@@ -187,7 +185,7 @@ def _summarize_output(output: str, patch_event: dict | None = None) -> tuple[str
         return "ok", Status.PASSED
     if lines == 1 and len(output.strip()) <= 50:
         return output.strip(), Status.PASSED
-    return f"{lines} lines", Status.PASSED
+    return count_label(lines, "line"), Status.PASSED
 
 
 def _make_tool_call(pending: dict, output: str, patch_event: dict | None = None) -> ToolCall:

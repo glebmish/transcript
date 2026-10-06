@@ -51,7 +51,7 @@ def test_parse_custom_apply_patch_tool_call():
     tc = t.messages[2].tool_calls[1]
     assert tc.name == "apply_patch"
     assert tc.summary == "tests/test_login.py"
-    assert tc.result_summary == "1 files changed"
+    assert tc.result_summary == "1 file changed"
     assert tc.status == Status.PASSED
 
 
@@ -228,3 +228,8 @@ def test_output_without_matching_call_is_kept(tmp_path, capsys):
     assert tc.summary == "unmatched output for call c_lost"
     assert tc.result_full == "orphan output"
     assert t.messages[0].content_order == [("tool", 0)]
+
+
+def test_single_long_line_output_is_singular(tmp_path):
+    tc = _single_tool_output(tmp_path, "x" * 60)
+    assert tc.result_summary == "1 line"

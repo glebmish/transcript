@@ -196,3 +196,15 @@ def test_real_model_assistant_header_keeps_cost():
     ])
     header = next(line for line in render(t).splitlines() if line.startswith("## Assistant"))
     assert header.endswith("· $0.0075")
+
+
+def test_tool_call_header_shows_cancelled_when_present():
+    msg = Message(role=Role.USER, timestamp=TS1, text=["hi"])
+    md = render(_make_transcript([msg], tool_stats=ToolStats(passed=2, failed=1, cancelled=3)))
+    assert "- **Tool calls**: 6 (2 passed, 1 failed, 3 cancelled)" in md
+
+
+def test_tool_call_header_omits_zero_cancelled():
+    msg = Message(role=Role.USER, timestamp=TS1, text=["hi"])
+    md = render(_make_transcript([msg], tool_stats=ToolStats(passed=2, failed=1, cancelled=0)))
+    assert "- **Tool calls**: 3 (2 passed, 1 failed)\n" in md

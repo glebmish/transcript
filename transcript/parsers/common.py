@@ -28,6 +28,11 @@ def as_int(value) -> int:
     return 0
 
 
+def count_label(n, singular: str, plural: str | None = None) -> str:
+    """'1 line', '2 lines', '? lines': singular only when n == 1."""
+    return f"{n} {singular if n == 1 else plural or singular + 's'}"
+
+
 # Claude Code writes this pseudo-model on placeholder assistant entries
 # (interrupts, API errors). It is not a real model and made no API call.
 SYNTHETIC_MODEL = "<synthetic>"

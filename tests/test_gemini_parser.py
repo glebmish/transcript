@@ -273,3 +273,13 @@ def test_error_and_warning_messages_become_system_messages(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "unknown Gemini message type 'mystery'" in err
     assert "info" not in err
+
+
+def test_display_counts_of_one_are_singular():
+    from transcript.parsers.gemini import _summarize_text, _summary_from_display
+    assert _summarize_text("y" * 60) == "1 line"
+    assert _summarize_text("a\nb") == "2 lines"
+    assert _summary_from_display(["only"]) == "1 line"
+    assert _summary_from_display({"files": ["a.py"]}) == "1 file"
+    assert _summary_from_display({"other": 1}) == "1 field"
+    assert _summary_from_display({"a": 1, "b": 2}) == "2 fields"

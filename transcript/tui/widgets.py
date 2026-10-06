@@ -80,7 +80,9 @@ class MessageHeaderWidget(GutterRow):
     """A message header (User/Assistant) that can receive focus."""
 
     def __init__(self, content: str | Content, **kwargs):
-        super().__init__("  ", content, markup=True, **kwargs)
+        # Search the visible text, not the markup tags around it.
+        plain = content.plain if isinstance(content, Content) else Content.from_markup(content).plain
+        super().__init__("  ", content, markup=True, searchable_text=plain, **kwargs)
         self.styles.margin = (1, 0, 0, 0)
 
 
@@ -149,7 +151,8 @@ class ThinkingWidget(GutterRow):
         )
 
     def _collapsed_text(self):
-        return Content.assemble((f"Thinking ({self._line_count} lines)  [>]", "dim italic"))
+        unit = "line" if self._line_count == 1 else "lines"
+        return Content.assemble((f"Thinking ({self._line_count} {unit})  [>]", "dim italic"))
 
     def _expanded_text(self):
         lines = self._full_text.strip().split("\n")
@@ -199,7 +202,12 @@ class ConversationPanel(VerticalScroll):
         t = self.transcript
         ts = t.tool_stats
         total_tools = ts.passed + ts.failed + ts.cancelled
-        failed_str = f" ({ts.failed} x)" if ts.failed else ""
+        problems = []
+        if ts.failed:
+            problems.append(f"{ts.failed} x")
+        if ts.cancelled:
+            problems.append(f"{ts.cancelled} cancelled")
+        problems_str = f" ({', '.join(problems)})" if problems else ""
 
         if t.total_cost is not None:
             cost_str = f"${t.total_cost:.2f}" if t.total_cost >= 0.01 else f"${t.total_cost:.4f}"
@@ -227,7 +235,7 @@ class ConversationPanel(VerticalScroll):
             "\n",
             (
                 f"  Duration: {dur} \u00b7 {model_str}\n"
-                f"  Messages: {user_c + asst_c} \u00b7 Tools: {total_tools}{failed_str} \u00b7 {cost_str}",
+                f"  Messages: {user_c + asst_c} \u00b7 Tools: {total_tools}{problems_str} \u00b7 {cost_str}",
                 "dim",
             ),
         )

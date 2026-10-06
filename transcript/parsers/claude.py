@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from transcript.model import Status, Role, ToolCall, Message, ToolStats, Transcript
 from transcript.pricing import estimate_cost
 from transcript.sanitize import sanitize_text
-from transcript.parsers.common import as_dict, as_int, as_str, is_real_model
+from transcript.parsers.common import as_dict, as_int, as_str, count_label, is_real_model
 
 _MIN_TS = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -105,11 +105,11 @@ def _tool_result_summary(tool_use_result) -> tuple[str, Status]:
     if isinstance(tool_use_result, dict):
         if "file" in tool_use_result:
             f = as_dict(tool_use_result["file"])
-            return f'{f.get("totalLines", "?")} lines', Status.PASSED
+            return count_label(f.get("totalLines", "?"), "line"), Status.PASSED
         if "filenames" in tool_use_result:
-            return f'{tool_use_result.get("numFiles", "?")} files', Status.PASSED
+            return count_label(tool_use_result.get("numFiles", "?"), "file"), Status.PASSED
         if "numMatches" in tool_use_result:
-            return f'{tool_use_result["numMatches"]} matches', Status.PASSED
+            return count_label(tool_use_result["numMatches"], "match", "matches"), Status.PASSED
         if "url" in tool_use_result:
             return f'HTTP {tool_use_result.get("code", "?")}', Status.PASSED
         if "exitCode" in tool_use_result:

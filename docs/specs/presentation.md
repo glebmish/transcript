@@ -92,7 +92,7 @@ Presentation groups native tools into common families. Agent docs own the native
 
 Examples: read, write, edit, read many files, list directory.
 
-Summary should be the relevant path or path list. Compact results should prefer structured counts such as `{n} lines`, `{n} files`, or `ok`.
+Summary should be the relevant path or path list. Compact results should prefer structured counts such as `{n} lines`, `{n} files`, or `ok`. Counts of 1 use the singular (`1 line`, `1 file`).
 
 Expanded detail should show full file contents, written content, or edit information when present.
 
