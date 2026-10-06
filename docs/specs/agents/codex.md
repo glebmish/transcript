@@ -173,14 +173,14 @@ Codex token counts are emitted in `event_msg` entries with `payload.type == "tok
 |---|---|
 | `payload.info.last_token_usage.input_tokens` | `Message.tokens_in` |
 | `payload.info.last_token_usage.output_tokens` | `Message.tokens_out` |
-| `payload.info.last_token_usage.cached_input_tokens` | `Message.tokens_cached` |
+| `payload.info.last_token_usage.cached_input_tokens` | `Message.tokens_cache_read` |
 | `payload.info.last_token_usage.reasoning_output_tokens` | `Message.tokens_thinking` |
 
 Each token-count event's `last_token_usage` is added to the open assistant message. If no assistant message is open, it goes to the most recent assistant message; if there is none yet, it is dropped. Multiple events on one message are summed. `payload.info.total_token_usage` is not used.
 
 `token_count` events may carry `"info": null` or a null `last_token_usage` (for example before the first model response). These events have no usage to apply and are ignored.
 
-Cached input tokens are treated as free by the common cost contract.
+`input_tokens` already includes `cached_input_tokens`, so `tokens_in` is the full input context and cached tokens are recorded as cache reads. Codex logs report no cache writes.
 
 OpenAI models used by Codex are not in the pricing table, so Codex cost is always unknown (`$?`). Token counts are still shown.
 

@@ -157,10 +157,16 @@ Claude usage fields are per assistant message.
 |---|---|
 | `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` | `tokens_in` |
 | `output_tokens` | `tokens_out` |
-| `cache_creation_input_tokens + cache_read_input_tokens` | `tokens_cached` |
+| `cache_read_input_tokens` | `tokens_cache_read` |
+| `cache_creation.ephemeral_1h_input_tokens` | `tokens_cache_write_1h` |
+| rest of `cache_creation_input_tokens` | `tokens_cache_write_5m` |
 | none | `tokens_thinking = 0` |
 
-Claude `input_tokens` is the uncached, billable input portion. Total context is the sum of input, cache creation, and cache read tokens.
+Claude `input_tokens` is the uncached input portion only. Total context is the sum of input, cache creation, and cache read tokens.
+
+Cache writes are split by TTL using `usage.cache_creation` when it is an object. Whatever the breakdown does not attribute to the 1-hour TTL, including all writes when the breakdown is missing, null or not an object, counts as 5-minute writes. If the breakdown adds up to more than `cache_creation_input_tokens`, the breakdown total is used. All counts go through the `parsers.common` coercions, and negative values count as 0.
+
+Streaming entries that share a `message.id` are merged with `max()` per field, including each cache field. Distinct ids are separate messages, so their costs add up in the transcript total.
 
 ## Status Mapping
 

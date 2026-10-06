@@ -79,7 +79,9 @@ List native tool names and the field used for `ToolCall.summary`.
 |---|---|---|
 | | `tokens_in` | |
 | | `tokens_out` | |
-| | `tokens_cached` | |
+| | `tokens_cache_read` | |
+| | `tokens_cache_write_5m` | |
+| | `tokens_cache_write_1h` | |
 | | `tokens_thinking` | |
 
 ## Special Native Concepts

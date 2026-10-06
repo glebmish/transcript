@@ -45,7 +45,7 @@ tests/
 
 - All parsers produce a `Transcript` dataclass. Renderers and TUI consume only this model.
 - Test fixtures must use generic/synthetic data, never real user logs.
-- Cache reads and cache writes are treated as free for cost estimation.
+- Cache tokens are priced the way each provider bills them, from literal prices in `pricing.py`. Anthropic: cache writes cost 1.25x input (5m TTL) or 2x (1h TTL), and reads 0.1x input except `claude-fable-5-1` and `claude-opus-5-5`. Gemini: cached reads 0.1x input, no write charge. OpenAI/Codex stays unpriced.
 - Claude Code's `input_tokens` is the uncached portion only; total context = `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
 - Tool use matching is ID-based (`tool_use.id` <-> `tool_result.tool_use_id`; Codex uses `call_id`), not positional.
 - `--expand-tools` shows full output with no truncation.
@@ -58,5 +58,5 @@ tests/
 
 - `.claude/skills/` and `.agents/skills/` are optional maintainer tooling for coding agents. They are not needed to build, test or use the tool.
 - Some skills depend on the maintainer's personal setup: Cloudinary (`CLOUDINARY_URL`, the `cld` CLI), `textimg`, ImageMagick, a JetBrainsMono Nerd Font path, and tmux/cmux.
-- `session-reflection/reflect.py` is experimental and uses its own pricing model (it charges cache writes and reads), which differs from `transcript/pricing.py`.
+- `session-reflection/reflect.py` is experimental and uses its own pricing table, separate from `transcript/pricing.py`.
 - The `.agents` copy is adapted from the `.claude` copy, and some pieces still assume Claude Code paths (for example `~/.claude/projects` in `reflect.py`).

@@ -148,12 +148,13 @@ Gemini reports usage per API call. `tokens.input` is that call's full prompt siz
 |---|---|
 | `tokens.input` | `tokens_in` |
 | `tokens.output` | `tokens_out` |
-| `tokens.cached` | `tokens_cached` |
+| `tokens.cached` | `tokens_cache_read` |
+| none | `tokens_cache_write_5m = tokens_cache_write_1h = 0` |
 | `tokens.thoughts` | `tokens_thinking` |
 
-Billable input is `tokens_in - tokens_cached`, as for every other parser. Because the prompt is re-sent on every call, `Transcript.total_tokens_in` is the sum of per-call prompt sizes, not the size of the final context.
+Uncached input is `tokens_in - tokens_cache_read`, as for every other parser. Cached input is billed at 0.1x the input price. Gemini CLI relies on implicit caching, which has no write charge, so no cache writes are recorded. Explicit-cache storage fees are not modeled because logs do not show them. Because the prompt is re-sent on every call, `Transcript.total_tokens_in` is the sum of per-call prompt sizes, not the size of the final context.
 
-Gemini also reports `tokens.tool` and `tokens.total` in observed logs. These are currently ignored because the common model does not have separate tool-token or total-token fields; `tokens_in`, `tokens_out`, `tokens_cached`, and `tokens_thinking` remain the supported cost/display fields.
+Gemini also reports `tokens.tool` and `tokens.total` in observed logs. These are currently ignored because the common model does not have separate tool-token or total-token fields; `tokens_in`, `tokens_out`, `tokens_cache_read`, and `tokens_thinking` remain the supported cost/display fields.
 
 ## Status Mapping
 

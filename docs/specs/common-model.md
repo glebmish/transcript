@@ -34,7 +34,9 @@ class Message:
     model: str | None = None
     tokens_in: int = 0
     tokens_out: int = 0
-    tokens_cached: int = 0
+    tokens_cache_read: int = 0
+    tokens_cache_write_5m: int = 0
+    tokens_cache_write_1h: int = 0
     tokens_thinking: int = 0
     thinking: list[str] = field(default_factory=list)
     text: list[str] = field(default_factory=list)
@@ -82,6 +84,10 @@ class Transcript:
 
 When a native format exposes media without a common media field, parsers may add a short placeholder to `Message.text` so the transcript shows that the media existed.
 
+`Message.tokens_in` is the call's full input context: uncached input plus cache writes plus cache reads. Displays such as `↑` use it as-is.
+
+`Message.tokens_cache_read`, `Message.tokens_cache_write_5m` and `Message.tokens_cache_write_1h` are the parts of `tokens_in` that were read from the prompt cache or written to it with a 5-minute or 1-hour TTL. Uncached input is `tokens_in - tokens_cache_read - tokens_cache_write_5m - tokens_cache_write_1h`, clamped at 0. Parsers record cache counts even for models that are not priced.
+
 `Message.thinking` contains native thinking, reasoning, or thought-description blocks when available.
 
 `Message.tool_calls` contains normalized tool calls attached to assistant messages.
@@ -119,18 +125,30 @@ Parsers should skip native internals only when the relevant agent mapping spec s
 
 ## Cost Contract
 
-Pricing is stored in `transcript/pricing.py` as input and output USD prices per 1M tokens, keyed by model-name prefix. The prices are a snapshot of the published Anthropic and Google rates as of 2026-10-06 (sources are listed at the top of that file) and are not updated automatically.
+Pricing is stored in `transcript/pricing.py` as USD prices per 1M tokens, keyed by model-name prefix. Each entry lists five literal prices: `input`, `output`, `cache_read`, `cache_write_5m` and `cache_write_1h`. The prices are a snapshot of the published Anthropic and Google rates as of 2026-10-06 (sources are listed at the top of that file) and are not updated automatically.
 
 A model name is priced by the longest key it starts with. This lets dated ids such as `claude-sonnet-4-5-20250929` resolve to `claude-sonnet-4-5`, and keeps a shorter key from capturing a longer, differently priced family (`gemini-2.5-flash` vs `gemini-2.5-flash-lite`, `claude-opus-5` vs `claude-opus-5-5`).
 
 OpenAI/Codex models are intentionally not priced, so Codex message and transcript cost is unknown (`$?`).
 
-Cached input tokens are treated as free. Cost is:
+Cache tokens are priced the way each provider bills them:
+
+- Anthropic: cache writes cost 1.25x the input price for the 5-minute TTL and 2x for the 1-hour TTL. Cache reads cost 0.1x input, except `claude-fable-5-1` ($0.25) and `claude-opus-5-5` ($0.20).
+- Gemini 2.5: cached input costs 0.1x input. There is no cache-write price, because Gemini CLI relies on implicit caching; storage fees for explicit caches are not modeled, since logs do not show them.
+- OpenAI/Codex: unpriced, as above. Cached reads are still recorded on the message.
+
+`estimate_cost()` clamps negative counts to 0 and computes:
 
 ```text
-billable_input = max(0, tokens_in - tokens_cached)
-cost = billable_input / 1_000_000 * input_price + tokens_out / 1_000_000 * output_price
+uncached = max(0, tokens_in - cache_read - cache_write_5m - cache_write_1h)
+cost = (uncached * input_price
+        + cache_write_5m * cache_write_5m_price
+        + cache_write_1h * cache_write_1h_price
+        + cache_read * cache_read_price
+        + tokens_out * output_price) / 1_000_000
 ```
+
+`message_cost(msg)` applies it to a `Message`'s model and token fields. Parsers and renderers use it for per-message and transcript cost.
 
 If a model is unknown, cost for that message is unknown. Transcript cost sums known message costs and sets `cost_is_partial=True` when any message had unknown cost. If all message costs are unknown, `total_cost` is `None`.
 
